@@ -1,0 +1,66 @@
+{
+  "counter": {
+    "projects": {
+      "20250417": 3
+    }
+  },
+  "projects": {
+    "20250418": 27,
+    "20250419": 29,
+    "20250421": 7,
+    "20250422": 13,
+    "20250423": 18
+  },
+  "details": [
+    {
+      "projectId": "PRJ-20250418-01",
+      "projectName": "pqr",
+      "analysisStatus": "done",
+      "creationTime": 1744950975165,
+      "operation": "analysis",
+      "progress": 100,
+      "numberOfSamples": 0,
+      "totalTime": 11991
+    },
+    {
+      "projectId": "PRJ-20250418-01",
+      "projectName": "pqr",
+      "analysisStatus": "done",
+      "creationTime": 1744950975165,
+      "operation": "analysis",
+      "progress": 100,
+      "numberOfSamples": 0,
+      "totalTime": 20867
+    },
+    {
+      "projectId": "PRJ-20250418-01",
+      "projectName": "pqr",
+      "analysisStatus": "done",
+      "creationTime": 1744950975165,
+      "operation": "analysis",
+      "progress": 100,
+      "numberOfSamples": 0,
+      "totalTime": 31864
+    },
+    {
+      "projectId": "PRJ-20250418-01",
+      "projectName": "pqr",
+      "analysisStatus": "done",
+      "creationTime": 1744950975165,
+      "operation": "analysis",
+      "progress": 100,
+      "numberOfSamples": 0,
+      "totalTime": 43086
+    },
+    {
+      "projectId": "PRJ-20250418-01",
+      "projectName": "pqr",
+      "analysisStatus": "done",
+      "creationTime": 1744950975165,
+      "operation": "analysis",
+      "progress": 100,
+      "numberOfSamples": 0,
+      "totalTime": 53276
+    }
+  ]
+}
