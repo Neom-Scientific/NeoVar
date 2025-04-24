@@ -5,7 +5,6 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
 import { generateProjectId, loadCounters, loadRunningTasks, saveCounters, saveRunningTasks } from '@/lib/idGenerator';
 
 export let runningTasks = await loadRunningTasks();
@@ -13,7 +12,7 @@ export let runningTasks = await loadRunningTasks();
 export async function POST(req) {
   try {
     // Parse the request body
-    const { projectName, folderName, excelSheet, testType ,outputDirectory ,inputDirectory } = await req.json();
+    const { projectName, folderName, testType ,outputDirectory ,numberOfSamples , excelSheet} = await req.json();
 
     // initialize the counter
     const counter = loadCounters();
@@ -33,29 +32,25 @@ export async function POST(req) {
 
 
     // selecting the input and output directories with the excel sheet
-    // const inputDir = path.join(process.cwd(), 'uploads', folderName);
-    // const inputDir = path.join(os.tmpdir(), 'uploads' ,folderName);
+    const inputDir = path.join(os.tmpdir(), 'uploads' ,folderName);
     const outputDir = path.join(outputDirectory , formattedDateTime);
 
-    // const excelPath = path.join(inputDirectory, excelSheet);
-    console.log('inputDir:', inputDirectory);
     console.log('outputDir:', outputDir);
-    // console.log('excelPath:', excelPath);
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Read the content of the Excel file
-    let numberOfSamples=0;
-    const workbook = XLSX.readFile(excelPath); // Read the Excel file
-    const sheetName = workbook.SheetNames[0]; // Get the first sheet name
-    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }); // Convert sheet to JSON
-    console.log('Excel Data:', sheetData); // Log the Excel data
+    // let NOS=0;
+    const excelFile = path.join(inputDir, excelSheet ); // Assuming the Excel file is named 'input.xlsx'
+    if (!fs.existsSync(excelFile)) {
+      return NextResponse.json({ error: 'Excel file not found' }, { status: 400 });
+    }
+    console.log('Excel file path:', excelFile);
     
-    // count the number of samples in the excel sheet
-    numberOfSamples = sheetData.length;
-    console.log('Number of samples:', numberOfSamples); // Log the number of samples
+    // // count the number of samples in the excel sheet
+    // NOS = sheetData.length;
+    // console.log('Number of samples:', NOS); // Log the number of samples
 
     // making the path for the files for different testTypes
-    const inputDir=inputDirectory;
     const basePath = path.join(process.cwd(), '../fastq_to_vcf/resources');
     let target, target_interval;
 
@@ -84,7 +79,7 @@ export async function POST(req) {
     
 
     // command to run the bash script
-    const command = `${scriptPath1} ${scriptPath2} ${inputDirectory} ${outputDir} ${target} ${target_interval} > ${logPath} 2>&1 &`;
+    const command = `${scriptPath1} ${scriptPath2} ${inputDir} ${outputDir} ${target} ${target_interval} > ${logPath} 2>&1 &`;
     console.log('[RUNNING COMMAND]:', command);
 
     // Check if the task is already running

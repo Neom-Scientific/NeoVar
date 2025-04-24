@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import { Readable } from 'stream';
 import formidable from 'formidable';
+import * as XLSX from 'xlsx';
 
 export const config = {
   api: {
@@ -26,12 +27,11 @@ export async function POST(request) {
 
   try {
     const nodeRequest = toNodeRequest(request); // stream + headers
-    const {inputDirectory} = await request.json();
+    // const {inputDirectory} = await request.json();
 
     const { fields, files } = await new Promise((resolve, reject) => {
       const form = formidable({
         multiples: true,
-        uploadDir: inputDirectory,
         keepExtensions: true,
         maxTotalFileSize: 5 * 1024 * 1024 * 1024, // 5GB
         maxFileSize: 5 * 1024 * 1024 * 1024, // 5GB
@@ -44,30 +44,133 @@ export async function POST(request) {
     });
 
     const tempDir = path.join(os.tmpdir(), 'uploads');
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
-}
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
 
-// Create a single upload directory for the session
-const folderName = path.dirname(files.file[0].originalFilename);
-// const uploadDir = path.join(tempDir, folderName);
-if(!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-console.log('uploadDir:', uploadDir);
+    // Create a single upload directory for the session
+    const folderName = path.dirname(files.file[0].originalFilename);
+    const uploadDir = path.join(tempDir, folderName);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    console.log('uploadDir:', uploadDir);
 
-const fileList = Array.isArray(files.file) ? files.file : [files.file];
-fileList.forEach(file => {
-  const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
-  try {
-    fs.copyFileSync(file.filepath, destPath);
-    console.log('File copied successfully:', destPath);
-    fs.unlinkSync(file.filepath);
-  } catch (error) {
-    console.error('Error during file operation:', error);
-    throw error;
-  }
-});
+    const fileList = Array.isArray(files.file) ? files.file : [files.file];
+
+    const referenceSampleIds = [];
+
+    fileList.forEach((file, index) => {
+      const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
+
+      try {
+        fs.copyFileSync(file.filepath, destPath);
+        console.log('File copied to temp upload dir:', destPath);
+
+        const lowerCaseDestPath = destPath.toLowerCase();
+
+        if (lowerCaseDestPath.endsWith('.xls') || lowerCaseDestPath.endsWith('.xlsx')) {
+          const fileBuffer = fs.readFileSync(destPath);
+
+          try {
+            const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            const numberOfSamples = sheetData.length;
+
+            const sampleIds = sheetData
+              .map(row => row['Sample ID']?.toString().trim())
+              .filter(Boolean);
+
+            referenceSampleIds.push(...sampleIds);
+            console.log('Extracted Sample IDs:', referenceSampleIds);
+          } catch (err) {
+            console.error('Error reading Excel file:', err);
+          }
+        } else if (
+          lowerCaseDestPath.endsWith('.fastq') ||
+          lowerCaseDestPath.endsWith('.fastq.gz') ||
+          lowerCaseDestPath.endsWith('.fq') ||
+          lowerCaseDestPath.endsWith('.fq.gz')
+        ) {
+          const baseName = path.basename(file.originalFilename || '').toLowerCase();
+          const matchedId = referenceSampleIds.find(id =>
+            baseName.includes(id.toLowerCase())
+          );
+
+          if (matchedId) {
+            console.log(`✅ File "${file.originalFilename}" matches Sample ID: ${matchedId}`);
+
+            // Now move/copy to input directory
+            const inputDir = path.join('/tmp/input'); // Change to your actual input path
+            if (!fs.existsSync(inputDir)) fs.mkdirSync(inputDir, { recursive: true });
+
+            const targetPath = path.join(inputDir, path.basename(destPath));
+            fs.copyFileSync(destPath, targetPath);
+            console.log(`✅ File copied to input directory: ${targetPath}`);
+            const response= new NextResponse({ message: `${file.originalFilename} copied to input directory`, status: 200 });
+            return response;
+          } else {
+            console.error(`❌ File "${file.originalFilename}" does not match any Sample ID from Excel.`);
+            fs.unlinkSync(destPath); // Clean up temp file
+            const response= new NextResponse({ message: `${file.originalFilename} does not match from Excel`, status: 400 });
+            return response;
+            // Optional: throw error or push to error array if you want to respond later
+          }
+        }
+      } catch (error) {
+        console.error('Error processing file:', error);
+      } finally {
+        try {
+          fs.unlinkSync(file.filepath); // Always clean up temp
+        } catch (err) {
+          console.warn('Temp file deletion failed:', err.message);
+        }
+      }
+    });
+
+    // fileList.forEach(file => {
+    //   const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
+
+    //   // Normalize the case for comparison
+    //   const lowerCaseDestPath = destPath.toLowerCase();
+    //   // Check for both .xls and .xlsx extensions
+
+    //   try {
+    //     fs.copyFileSync(file.filepath, destPath);
+    //     console.log('File copied:', destPath);
+
+    //     if (lowerCaseDestPath.endsWith('.xls') || lowerCaseDestPath.endsWith('.xlsx')) {
+    //       if (!fs.existsSync(destPath)) {
+    //         console.error('Excel file does not exist:', destPath);
+    //         return;
+    //       }
+
+    //       const fileBuffer = fs.readFileSync(destPath);
+
+    //       try {
+    //         const workbook = XLSX.read(fileBuffer, { type: 'buffer' }); // better than `readFile()`
+    //         const sheetName = workbook.SheetNames[0];
+    //         const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    //         console.log('Excel Data:', sheetData);
+    //       } catch (err) {
+    //         console.error('XLSX.read buffer failed:', err);
+    //       }
+
+    //       const header = fileBuffer.subarray(0, 8).toString('hex');
+
+    //     }
+    //   } catch (error) {
+    //     console.error('Error handling Excel file:', error);
+    //   } finally {
+    //     try {
+    //       fs.unlinkSync(file.filepath); // Only delete temp if safe
+    //     } catch (err) {
+    //       console.warn('Temp file deletion failed:', err.message);
+    //     }
+    //   }
+
+    // });
 
     const response = new NextResponse({ message: 'file uploaded successfully', status: 200 });
 
@@ -78,285 +181,3 @@ fileList.forEach(file => {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });
   }
 }
-
-
-// // v3.1.0
-
-// import { NextResponse } from 'next/server';
-// import { spawn } from 'child_process';
-// import fs from 'fs';
-// import os from 'os';
-// import path from 'path';
-// import { Readable } from 'stream';
-// import archiver from 'archiver';
-// import { IncomingForm } from 'formidable';
-
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// };
-
-// function toNodeReadableStream(request) {
-//   return Readable.from(request.body);
-// }
-
-// export async function POST(request) {
-//   const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'input-'));
-//   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'output-'));
-
-//   try {
-//     const stream = toNodeReadableStream(request);
-
-//     const { fields, files } = await new Promise((resolve, reject) => {
-//       const form = new IncomingForm({
-//         multiples: true,
-//         uploadDir: inputDir,
-//         keepExtensions: true,
-//       });
-
-//       form.parse(stream, (err, fields, files) => {
-//         if (err) reject(err);
-//         else resolve({ fields, files });
-//       });
-//     });
-
-//     console.log('Fields:', fields);
-//     console.log('Files:', files);
-//     console.log('inputDir:', inputDir);
-//     console.log('outputDir:', outputDir);
-//     // const { target, targetInterval } = fields;
-
-//     // const fileList = Array.isArray(files.file) ? files.file : [files.file];
-//     // fileList.forEach(file => {
-//     //   const destPath = path.join(inputDir, file.originalFilename);
-//     //   fs.renameSync(file.filepath, destPath);
-//     // });
-
-//     // const script = spawn('./yourMainScript.sh', [
-//     //   './script1.sh',
-//     //   './script2.sh',
-//     //   inputDir,
-//     //   outputDir,
-//     //   target,
-//     //   targetInterval
-//     // ]);
-
-//     // let stderr = '';
-//     // await new Promise((resolve, reject) => {
-//     //   script.stderr.on('data', (data) => stderr += data.toString());
-//     //   script.on('close', (code) => {
-//     //     if (code !== 0) reject(stderr);
-//     //     else resolve();
-//     //   });
-//     // });
-
-//     // const archive = archiver('zip');
-//     // const streamOutput = new Readable().wrap(archive);
-
-//     // fs.readdirSync(outputDir).forEach(file => {
-//     //   const fullPath = path.join(outputDir, file);
-//     //   archive.file(fullPath, { name: file });
-//     // });
-//     // archive.finalize();
-
-//     // const headers = new Headers();
-//     // headers.set('Content-Type', 'application/zip');
-//     // headers.set('Content-Disposition', 'attachment; filename="results.zip"');
-
-//     // const response = new NextResponse(streamOutput, { status: 200, headers });
-
-//     const response = new NextResponse({ message: 'file uploaded successfully', status: 200 });
-//     // streamOutput.on('end', () => {
-//     //   fs.rmSync(inputDir, { recursive: true, force: true });
-//     //   fs.rmSync(outputDir, { recursive: true, force: true });
-//     // });
-
-//     return response;
-//   } catch (error) {
-//     fs.rmSync(inputDir, { recursive: true, force: true });
-//     fs.rmSync(outputDir, { recursive: true, force: true });
-//     return NextResponse.json({ error: error.toString() }, { status: 500 });
-//   }
-// }
-
-
-// // v3.0.0
-// import { NextResponse } from 'next/server';
-// import { spawn } from 'child_process';
-// import fs from 'fs';
-// import os from 'os';
-// import path from 'path';
-// import { Readable } from 'stream';
-// import archiver from 'archiver';
-// import { IncomingForm } from 'formidable';
-
-// // Disable body parser for file upload
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// };
-
-// export async function POST(req) {
-//   const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'input-'));
-//   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'output-'));
-
-//   try {
-//     // 1. Parse incoming form data
-//     const { fields, files } = await new Promise((resolve, reject) => {
-//       const form = new IncomingForm({ multiples: true, uploadDir: inputDir, keepExtensions: true });
-//       form.parse(req, (err, fields, files) => {
-//         if (err) reject(err);
-//         else resolve({ fields, files });
-//       });
-//     });
-
-//     console.log('Fields:', fields);
-//     console.log('Files:', files);
-
-//     // const { target, targetInterval } = fields;
-
-//     // // 2. Rename uploaded files to original filenames
-//     // const fileList = Array.isArray(files.file) ? files.file : [files.file];
-//     // fileList.forEach(file => {
-//     //   const destPath = path.join(inputDir, file.originalFilename);
-//     //   fs.renameSync(file.filepath, destPath);
-//     // });
-
-//     // // 3. Run the bash script
-//     // const script = spawn('./yourMainScript.sh', [
-//     //   './script1.sh',
-//     //   './script2.sh',
-//     //   inputDir,
-//     //   outputDir,
-//     //   target,
-//     //   targetInterval
-//     // ]);
-
-//     // let stderr = '';
-//     // await new Promise((resolve, reject) => {
-//     //   script.stderr.on('data', (data) => stderr += data.toString());
-//     //   script.on('close', (code) => {
-//     //     if (code !== 0) reject(stderr);
-//     //     else resolve();
-//     //   });
-//     // });
-
-//     // // 4. Zip output folder to stream
-//     // const archive = archiver('zip');
-//     // const zipStream = new Readable().wrap(archive);
-
-//     // fs.readdirSync(outputDir).forEach(file => {
-//     //   const fullPath = path.join(outputDir, file);
-//     //   archive.file(fullPath, { name: file });
-//     // });
-//     // archive.finalize();
-
-//     // // 5. Prepare NextResponse stream
-//     // const headers = new Headers();
-//     // headers.set('Content-Type', 'application/zip');
-//     // headers.set('Content-Disposition', 'attachment; filename="results.zip"');
-
-//     // const response = new NextResponse(zipStream, { status: 200, headers });
-
-//     const response = new NextResponse({message:'file uploaded successfully', status: 200 });
-
-//     // // 6. Clean up after stream ends
-//     // zipStream.on('end', () => {
-//     //   fs.rmSync(inputDir, { recursive: true, force: true });
-//     //   fs.rmSync(outputDir, { recursive: true, force: true });
-//     // });
-
-//     return response;
-//   } catch (error) {
-//     fs.rmSync(inputDir, { recursive: true, force: true });
-//     fs.rmSync(outputDir, { recursive: true, force: true });
-//     return NextResponse.json({ error: error.toString() }, { status: 500 });
-//   }
-// }
-
-
-// // import formidable from 'formidable';
-// // import fs from 'fs';
-// // import path from 'path';
-// // import { NextResponse } from 'next/server';
-// // import { Readable } from 'stream';
-
-// // export const config = {
-// //   api: {
-// //     bodyParser: false,
-// //   },
-// // };
-
-// // function convertToNodeReadable(req) {
-// //   const reader = req.body.getReader();
-// //   return Readable.from((async function* () {
-// //     while (true) {
-// //       const { done, value } = await reader.read();
-// //       if (done) break;
-// //       yield value;
-// //     }
-// //   })());
-// // }
-
-// // function convertHeaders(headers) {
-// //   const result = {};
-// //   for (const [key, value] of headers.entries()) {
-// //     result[key.toLowerCase()] = value;
-// //   }
-// //   return result;
-// // }
-
-// // export async function POST(req) {
-// //   try {
-// //     const nodeReq = convertToNodeReadable(req);
-// //     nodeReq.headers = convertHeaders(req.headers);
-
-// //     let projectName = 'default_project'; // Fallback if no project name is provided
-
-// //     const form = formidable({
-// //       multiples: true, // Allow multiple file uploads
-// //       keepExtensions: true, // Keep the original file extensions
-// //       maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
-// //     });
-
-// //     // Listen to field event to get project name early
-// //     form.on('field', (name, value) => {
-// //       if (name === 'project') {
-// //         projectName = value;
-// //       }
-// //     });
-
-// //     // Set file destination dynamically before each file is saved
-// //     form.on('fileBegin', (name, file) => {
-// //       const folderName = path.dirname(file.originalFilename);
-// //       const uploadDir = path.join(process.cwd(), 'uploads', folderName);
-// //       fs.mkdirSync(uploadDir, { recursive: true });
-// //       const fileName = path.basename(file.originalFilename);
-// //       const newFilePath = path.join(uploadDir, fileName || file.newFilename);
-// //       file.filepath = newFilePath; // Override the path
-// //     });
-
-// //     const { fields, files } = await new Promise((resolve, reject) => {
-// //       form.parse(nodeReq, (err, fields, files) => {
-// //         if (err) return reject(err);
-// //         resolve({ fields, files });
-// //       });
-// //     });
-// //     console.log('Fields:', fields);
-// //     console.log('Files:', files);
-
-// //     // Dynamically set the project directory
-// //     const projectDir = path.join(process.cwd(), 'uploads', projectName);
-// //     fs.mkdirSync(projectDir, { recursive: true });
-
-
-// //     return NextResponse.json({ message: 'Files uploaded successfully' }, { status: 200 });
-// //   } catch (error) {
-// //     console.error('File upload failed:', error);
-// //     return new NextResponse(JSON.stringify({ message: 'File upload failed' }), {
-// //       status: 500,
-// //     });
-// //   }
-// // }

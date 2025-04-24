@@ -34,7 +34,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 const formSchema = z.object({
     projectName: z.string().min(1, { message: "Project name is required" }),
     outputDirectory: z.string().min(1, { message: "Output directory is required" }),
-    inputDirectory: z.string().min(1, { message: "Input directory is required" }),
+    // inputDirectory: z.string().min(1, { message: "Input directory is required" }),
     // testType: z.enum(['exome', 'clinical', 'carrier'], {
     //     required_error: "Test type is required",
     //     invalid_type_error: "Test type must be one of 'exome', 'clinical', or 'carrier'",
@@ -64,7 +64,7 @@ const NewProject = () => {
         defaultValues: {
             projectName: '',
             outputDirectory: '',
-            inputDirectory: '',
+            // inputDirectory: '',
             // testType: '', // Set default value for testType
         },
     })
@@ -92,66 +92,66 @@ const NewProject = () => {
     }
 
     // 3. directory input handler
-    // const handleDirectory = async (e) => {
-    //     const files = Array.from(e.target.files);
-    //     // console.log('Selected files:', files);
+    const handleDirectory = async (e) => {
+        const files = Array.from(e.target.files);
+        // console.log('Selected files:', files);
 
-    //     if (files.length === 0) {
-    //         setSelectedFolder(''); // Reset if no folder is selected
-    //         return;
-    //     }
+        if (files.length === 0) {
+            setSelectedFolder(''); // Reset if no folder is selected
+            return;
+        }
 
-    //     // Extract the folder name from the first file's path
-    //     const folderPath = files[0].webkitRelativePath.split('/')[0];
-    //     setSelectedFolder(folderPath); // Update the selected folder name
+        // Extract the folder name from the first file's path
+        const folderPath = files[0].webkitRelativePath.split('/')[0];
+        setSelectedFolder(folderPath); // Update the selected folder name
 
-    //     const folders = new Set();
+        const folders = new Set();
 
-    //     // Extract folder structure
-    //     files.forEach((file) => {
-    //         const pathParts = file.webkitRelativePath.split('/');
-    //         pathParts.pop(); // Remove file name
-    //         let folderPath = '';
-    //         for (const part of pathParts) {
-    //             folderPath += (folderPath ? '/' : '') + part;
-    //             folders.add(folderPath);
-    //         }
-    //     });
+        // Extract folder structure
+        files.forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            pathParts.pop(); // Remove file name
+            let folderPath = '';
+            for (const part of pathParts) {
+                folderPath += (folderPath ? '/' : '') + part;
+                folders.add(folderPath);
+            }
+        });
 
-    //     // Send folder structure metadata
+        // Send folder structure metadata
 
-    //     for (const file of files) {
-    //         const formData = new FormData(); // Create a fresh FormData for each file
+        for (const file of files) {
+            const formData = new FormData(); // Create a fresh FormData for each file
 
-    //         formData.append('file', file, file.webkitRelativePath);
-    //         formData.append('targetDirectory', form.getValues('inputDirectory'));
-    //         setFiles(prevFiles => [...prevFiles, file]); // Update state with selected files
-    //     }
+            formData.append('file', file, file.webkitRelativePath);
+            formData.append('targetDirectory', form.getValues('inputDirectory'));
+            setFiles(prevFiles => [...prevFiles, file]); // Update state with selected files
+        }
 
-    //     try {
-    //         setIsUploading(true); // Show progress bar
-    //         setProgressValue(0); // Reset progress value
-    //         setShowPopup(true); // Show popup
+        try {
+            setIsUploading(true); // Show progress bar
+            setProgressValue(0); // Reset progress value
+            setShowPopup(true); // Show popup
 
-    //         // Simulate upload progress
-    //         const simulateProgress = () => {
-    //             setProgressValue((prev) => {
-    //                 if (prev >= 100) {
-    //                     clearInterval(interval); // Ensure interval is cleared when progress reaches 100%
-    //                     setIsUploading(false); // Hide progress bar
-    //                     setShowPopup(false); // Close popup
-    //                     return 100;
-    //                 }
-    //                 return prev + 10; // Increment progress by 10%
-    //             });
-    //         };
+            // Simulate upload progress
+            const simulateProgress = () => {
+                setProgressValue((prev) => {
+                    if (prev >= 100) {
+                        clearInterval(interval); // Ensure interval is cleared when progress reaches 100%
+                        setIsUploading(false); // Hide progress bar
+                        setShowPopup(false); // Close popup
+                        return 100;
+                    }
+                    return prev + 10; // Increment progress by 10%
+                });
+            };
 
-    //         const interval = setInterval(simulateProgress, 500); // Update progress every 500ms
-    //     } catch (error) {
-    //         console.error('Upload error:', error);
-    //         setIsUploading(false); // Hide progress bar in case of error
-    //     }
-    // };
+            const interval = setInterval(simulateProgress, 500); // Update progress every 500ms
+        } catch (error) {
+            console.error('Upload error:', error);
+            setIsUploading(false); // Hide progress bar in case of error
+        }
+    };
 
     // 4. test type handler
     const handleSelectTestType = (e) => {
@@ -160,106 +160,107 @@ const NewProject = () => {
     }
 
     // 5. Submit handler
-    // const handleSubmit = async (data) => {
-    //     console.log('data:', data);
-    //     for (let i = 0; i < Files.length; i++) {
-    //         const formData = new FormData();
-    //         formData.append('file', Files[i]);
-    //         formData.append('project', selectedFolder); // Folder name based on project
-
-    //         // Append Excel file only for the first file
-    //         if (i === 0 && excelFile) {
-    //             formData.append('file', excelFile);
-    //         }
-
-    //         try {
-    //             setShowDialog(true); // Show dialog
-    //             const res = await fetch('/api/uploads', {
-    //                 method: 'POST',
-    //                 inputDirectory: inputDir,
-    //                 body: formData,
-    //             });
-
-    //             if (!res.ok) {
-    //                 throw new Error('Network response was not ok');
-    //             }
-
-    //             if (!res.body) {
-    //                 console.error('Empty response from the server');
-    //                 return;
-    //             }
-
-
-    //             console.log('upload response:', res);
-    //         } catch (err) {
-    //             console.error('Error uploading:', err);
-    //         }
-    //     }
-
-    //     try {
-    //         // console.log('testtype:', testType);
-    //         const res = await axios.post('/api/run-analysis', {
-    //             projectName: data.projectName,
-    //             inputDirectory: inputDir,
-    //             outputDirectory:outputDir,
-    //             folderName: selectedFolder,
-    //             excelSheet: excelFile.name,
-    //             testType: testType,
-    //         });
-
-    //         if (res.status === 200) {
-    //             console.log('Analysis started successfully:', res.data);
-    //         } else {
-    //             console.error('Error starting analysis:', res.statusText);
-    //         }
-    //         // setTaskId(res.data.taskId); // Store the task ID for progress tracking
-    //         setShowDialog(false); // Hide dialog
-    //         saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
-    //         setRunningTasks(true); // Set running tasks to true
-    //         // console.log('Task ID:', taskId);
-
-    //     }
-    //     catch (error) {
-    //         console.error('Error:', error);
-    //     }
-
-    //     dispatch(setActiveTab('analysis'));
-    //     setShowAnalysis(true);
-    // }
-
-
     const handleSubmit = async (data) => {
         console.log('data:', data);
-        const folder = data.inputDirectory.split('/').pop();
-        setSelectedFolder(folder);
-        console.log('folder:', folder);
+        for (let i = 0; i < Files.length; i++) {
+            const formData = new FormData();
+            formData.append('file', Files[i]);
+            formData.append('project', selectedFolder); // Folder name based on project
+
+            // Append Excel file only for the first file
+            if (i === 0 && excelFile) {
+                formData.append('file', excelFile);
+            }
+
+            try {
+                setShowDialog(true); // Show dialog
+                const res = await fetch('/api/uploads', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!res.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                if (!res.body) {
+                    console.error('Empty response from the server');
+                    return;
+                }
+
+
+                console.log('upload response:', res);
+            } catch (err) {
+                console.error('Error uploading:', err);
+            }
+        }
+
         try {
-            setShowDialog(true); // Show dialog
-            const response = await window.electronAPI.startPipeline({
+            // console.log('testtype:', testType);
+            const res = await axios.post('/api/run-analysis', {
                 projectName: data.projectName,
-                folderName: selectedFolder,
-                excelPath: excelFile.name,
-                testType: testType,
-                inputDirectory: data.inputDirectory,
                 outputDirectory: data.outputDirectory,
+                folderName: selectedFolder,
                 numberOfSamples: numberOfSamples,
+                excelSheet: excelFile.name,
+                testType: testType,
             });
 
-            if (response.success) {
-                console.log('response:', response);
-                setShowDialog(false); // Hide dialog
-                saveTaskIdToLocalStorage(response.taskId); // Save task ID to local storage
-                setRunningTasks(true); // Set running tasks to true
-                setShowAnalysis(true);
-                dispatch(setActiveTab('analysis'));
+            if (res.status === 200) {
+                console.log('Analysis started successfully:', res.data);
             } else {
-                alert(`❌ Pipeline Error: ${response.error}`);
+                console.error('Error starting analysis:', res.statusText);
             }
+            // setTaskId(res.data.taskId); // Store the task ID for progress tracking
+            setShowDialog(false); // Hide dialog
+            saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
+            setRunningTasks(true); // Set running tasks to true
+            // console.log('Task ID:', taskId);
+
         }
         catch (error) {
             console.error('Error:', error);
         }
+
+        dispatch(setActiveTab('analysis'));
+        setShowAnalysis(true);
     }
+
+
+    // const handleSubmit = async (data) => {
+    //     console.log('data:', data);
+    //     const folder = data.inputDirectory.split('/').pop();
+    //     setSelectedFolder(folder);
+    //     console.log('folder:', folder);
+    //     try {
+    //         setShowDialog(true); // Show dialog
+    //         const response = await window.electronAPI.startPipeline({
+    //             projectName: data.projectName,
+    //             folderName: selectedFolder,
+    //             excelPath: excelFile.name,
+    //             testType: testType,
+    //             inputDirectory: data.inputDirectory,
+    //             outputDirectory: data.outputDirectory,
+    //             numberOfSamples: numberOfSamples,
+    //         });
+
+    //         if (response.success) {
+    //             console.log('response:', response);
+    //             setShowDialog(false); // Hide dialog
+    //             saveTaskIdToLocalStorage(response.taskId); // Save task ID to local storage
+    //             setRunningTasks(true); // Set running tasks to true
+    //             setShowAnalysis(true);
+    //             dispatch(setActiveTab('analysis'));
+    //         } else {
+    //             alert(`❌ Pipeline Error: ${response.error}`);
+    //         }
+    //     }
+    //     catch (error) {
+    //         console.error('Error:', error);
+    //     }
+    // }
+
+
 
     // 6. save taskId to local storage
     const saveTaskIdToLocalStorage = (taskId) => {
@@ -272,9 +273,9 @@ const NewProject = () => {
     }
 
     // 7. handle output directory
-    // const handleOutputDirectory = (e) => {
-    //    console.log('output directory:', e.target.value);
-    // }
+    const handleOutputDirectory = (e) => {
+       console.log('output directory:', e.target.value);
+    }
 
     // const handleInputDirectory = async () => {
     //     // const handle= await window.showDirectoryPicker();
@@ -330,11 +331,6 @@ const NewProject = () => {
     //     }
     //   };
 
-    useEffect(() => {
-        if (!window.electronAPI) {
-            console.error('❌ electronAPI not available!');
-        }
-    }, []);
 
     return (
         <div className='mx-5 my-10'>
@@ -369,16 +365,27 @@ const NewProject = () => {
                             name="inputDirectory"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className="my-4 text-2xl">Input directory</FormLabel>
+                                    <FormLabel className="my-4 text-2xl">Select Input Directory</FormLabel>
                                     <Input
-                                        type="text"
-                                        placeholder="paste the path to the output directory here"
+                                        type="file"
+                                        name="inputDirectory"
+                                        webkitdirectory="true"
+                                        directory="true"
+                                        multiple
                                         {...field}
-                                        className="w-[50%]"
+                                        className="w-[50%] cursor-pointer"
+                                        placeholder="Input Directory"
+                                        onChange={handleDirectory}
+                                        disabled={isUploading} // Disable input during upload
                                     />
-                                    {form.formState.errors.inputDirectory && (
+                                    {/* {form.formState.errors.inputDirectory && (
                                         <p className="mt-2 text-sm text-red-500">
                                             {form.formState.errors.inputDirectory.message}
+                                        </p>
+                                    )} */}
+                                    {selectedFolder && (
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            Selected Folder: <strong>{selectedFolder}</strong>
                                         </p>
                                     )}
                                 </FormItem>

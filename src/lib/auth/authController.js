@@ -41,6 +41,9 @@ export const SignUpRoute = async (body) => {
 export const SignInRoute = async ({ email, password, otp, user }) => {
     const otpRow = await db.query('SELECT * FROM otp_data WHERE email = $1', [email]);
     const generatedOtp = otpRow.rows[0]?.otp;
+
+    const registerData=await db.query('SELECT * FROM register_data WHERE email = $1', [email]);
+    if (registerData.rows.length === 0) throw new Error('Invalid email or password');
   
     if (!generatedOtp || generatedOtp !== otp) {
       await db.query('DELETE FROM otp_data WHERE email = $1', [email]);

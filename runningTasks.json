@@ -386,5 +386,93 @@
     "status": "in progress",
     "done": false,
     "progress": 0
+  },
+  "PRJ-20250423-22": {
+    "taskId": "PRJ-20250423-22",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "exome",
+    "startTime": 1745405505907,
+    "outputDir": "2025-4-23_16-21-45",
+    "logPath": "2025-4-23_16-21-45/output.log",
+    "status": "in progress",
+    "done": false,
+    "progress": 8
+  },
+  "PRJ-20250423-23": {
+    "taskId": "PRJ-20250423-23",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "clinical",
+    "startTime": 1745405800804,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_16-26-40",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_16-26-40/output.log",
+    "status": "in progress",
+    "done": false,
+    "progress": 8
+  },
+  "PRJ-20250423-28": {
+    "taskId": "PRJ-20250423-28",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "exome",
+    "startTime": 1745408240171,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_17-7-20",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_17-7-20/output.log",
+    "status": "running",
+    "done": false
+  },
+  "PRJ-20250423-30": {
+    "taskId": "PRJ-20250423-30",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "carrier",
+    "startTime": 1745409204846,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_17-23-24",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_17-23-24/output.log",
+    "status": "in progress",
+    "done": false,
+    "progress": 8
+  },
+  "PRJ-20250423-31": {
+    "taskId": "PRJ-20250423-31",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "exome",
+    "startTime": 1745414332618,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_18-48-52",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_18-48-52/output.log",
+    "status": "running",
+    "done": false
+  },
+  "PRJ-20250423-32": {
+    "taskId": "PRJ-20250423-32",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "clinical",
+    "startTime": 1745414845518,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_18-57-25",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_18-57-25/output.log",
+    "status": "running",
+    "done": false
+  },
+  "PRJ-20250423-33": {
+    "taskId": "PRJ-20250423-33",
+    "projectName": "abc",
+    "inputDir": "/tmp/uploads/germline_reporting2",
+    "numberOfSamples": 7,
+    "testType": "exome",
+    "startTime": 1745415857745,
+    "outputDir": "/media/strive/Strive/NewFolder2/2025-4-23_19-14-17",
+    "logPath": "/media/strive/Strive/NewFolder2/2025-4-23_19-14-17/output.log",
+    "status": "in progress",
+    "done": false,
+    "progress": 0
   }
 }

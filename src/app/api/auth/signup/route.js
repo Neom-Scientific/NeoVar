@@ -48,7 +48,7 @@ export async function POST(request) {
     console.error('Error during signup:', error);
     const isEmailExists = error.message.includes('Email already exists');
     return NextResponse.json(
-      { error: error.message },
+      { message: 'email already exists' },
       { status: isEmailExists ? 409 : 500 }
     );
   }
