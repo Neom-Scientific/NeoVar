@@ -26,8 +26,9 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import * as XLSX from 'xlsx'
-import axios from 'axios';
+import axios, { all } from 'axios';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { toast, ToastContainer } from 'react-toastify'
 
 
 // 1. Validation schema
@@ -54,8 +55,6 @@ const NewProject = () => {
     const [runningTasks, setRunningTasks] = useState(false);
     const [testType, setTestType] = useState('');
     const [showDialog, setShowDialog] = useState(false);
-    const [inputDir, setInputDir] = useState('');
-    const [outputDir, setOutputDir] = useState('');
     const [numberOfSamples, setNumberOfSamples] = useState(0);
 
     // 2. Setup form
@@ -159,106 +158,128 @@ const NewProject = () => {
         setTestType(selectedValue);
     }
 
+    let inputDir = '';
     // 5. Submit handler
     const handleSubmit = async (data) => {
         console.log('data:', data);
-        for (let i = 0; i < Files.length; i++) {
-            const formData = new FormData();
-            formData.append('file', Files[i]);
-            formData.append('project', selectedFolder); // Folder name based on project
 
-            // Append Excel file only for the first file
-            if (i === 0 && excelFile) {
-                formData.append('file', excelFile);
-            }
+        let allUploadsSuccessful = true;
 
-            try {
-                setShowDialog(true); // Show dialog
-                const res = await fetch('/api/uploads', {
-                    method: 'POST',
-                    body: formData,
-                });
+        const formData = new FormData();
 
-                if (!res.ok) {
-                    throw new Error('Network response was not ok');
-                }
-
-                if (!res.body) {
-                    console.error('Empty response from the server');
-                    return;
-                }
-
-
-                console.log('upload response:', res);
-            } catch (err) {
-                console.error('Error uploading:', err);
-            }
+        // Append Excel file once
+        if (excelFile) {
+            formData.append('file', excelFile);
         }
 
-        try {
-            // console.log('testtype:', testType);
-            const res = await axios.post('/api/run-analysis', {
-                projectName: data.projectName,
-                outputDirectory: data.outputDirectory,
-                folderName: selectedFolder,
-                numberOfSamples: numberOfSamples,
-                excelSheet: excelFile.name,
-                testType: testType,
-            });
+        // Append all FASTQ files
+        for (let i = 0; i < Files.length; i++) {
+            formData.append('file', Files[i]);
+        }
 
-            if (res.status === 200) {
-                console.log('Analysis started successfully:', res.data);
-            } else {
-                console.error('Error starting analysis:', res.statusText);
+        // Add project/folder name
+        formData.append('project', selectedFolder);
+
+        try {
+            setShowDialog(true); // Show dialog
+            console.log('formData:', formData);
+            const res = await axios.post('/api/uploads', formData);
+            console.log('res:', res);
+            inputDir = res.data[0].inputDir;
+
+            if (res.data[0].status === 400) {
+                allUploadsSuccessful = false;
+                setShowDialog(false);
+                toast.error(res.data[0].message, {
+                    position: "top-right",
+                    autoClose: 5000,
+                });
             }
-            // setTaskId(res.data.taskId); // Store the task ID for progress tracking
-            setShowDialog(false); // Hide dialog
-            saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
-            setRunningTasks(true); // Set running tasks to true
-            // console.log('Task ID:', taskId);
+
+        } catch (err) {
+            console.error('Error uploading:', err);
+            allUploadsSuccessful = false;
+        }
+
+        // let allUploadsSuccessful = true;
+        // for (let i = 0; i < Files.length; i++) {
+        //     const formData = new FormData();
+        //     formData.append('file', Files[i]);
+        //     formData.append('project', selectedFolder); // Folder name based on project
+
+        //     // Append Excel file only for the first file
+        //     if (i === 0 && excelFile) {
+        //         formData.append('file', excelFile);
+        //     }
+
+        //     try {
+        //         setShowDialog(true); // Show dialog
+        //         const res = await axios.post('/api/uploads', formData);
+        //         console.log('res:', res);
+        //         inputDir=res.data[0].inputDir
+
+        //         if(res.data[0].status === 400){
+        //             allUploadsSuccessful = false; // Set to false if any upload fails
+        //             setShowDialog(false); // Hide dialog
+        //             toast.error(res.data[0].message, {
+        //                 position: "top-right",
+        //                 autoClose: 5000,
+        //                 hideProgressBar: false,
+        //                 closeOnClick: true,
+        //                 pauseOnHover: true,
+        //                 draggable: true,
+        //                 progress: undefined,
+        //             });
+        //            break;
+        //         }
+
+
+        //     } catch (err) {
+        //         console.error('Error uploading:', err);
+        //     }
+        // }
+
+        try {
+            if (allUploadsSuccessful) {
+                toast.success('Files uploaded successfully', {
+                    position: "top-right",
+                    autoClose: 5000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    progress: undefined,
+                });
+                console.log('inputDir:', inputDir);
+                const res = await axios.post('/api/run-analysis', {
+                    projectName: data.projectName,
+                    outputDirectory: data.outputDirectory,
+                    inputDir,
+                    numberOfSamples: numberOfSamples,
+                    excelSheet: excelFile?.name,
+                    testType: testType,
+                });
+
+                if (res.status === 200) {
+                    console.log('Analysis started successfully:', res.data);
+                } else {
+                    console.error('Error starting analysis:', res.statusText);
+                }
+                // setTaskId(res.data.taskId); // Store the task ID for progress tracking
+                setShowDialog(false); // Hide dialog
+                saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
+                setRunningTasks(true); // Set running tasks to true
+                // console.log('Task ID:', taskId);
+                dispatch(setActiveTab('analysis'));
+                setShowAnalysis(true);
+            }
 
         }
         catch (error) {
             console.error('Error:', error);
         }
 
-        dispatch(setActiveTab('analysis'));
-        setShowAnalysis(true);
     }
-
-
-    // const handleSubmit = async (data) => {
-    //     console.log('data:', data);
-    //     const folder = data.inputDirectory.split('/').pop();
-    //     setSelectedFolder(folder);
-    //     console.log('folder:', folder);
-    //     try {
-    //         setShowDialog(true); // Show dialog
-    //         const response = await window.electronAPI.startPipeline({
-    //             projectName: data.projectName,
-    //             folderName: selectedFolder,
-    //             excelPath: excelFile.name,
-    //             testType: testType,
-    //             inputDirectory: data.inputDirectory,
-    //             outputDirectory: data.outputDirectory,
-    //             numberOfSamples: numberOfSamples,
-    //         });
-
-    //         if (response.success) {
-    //             console.log('response:', response);
-    //             setShowDialog(false); // Hide dialog
-    //             saveTaskIdToLocalStorage(response.taskId); // Save task ID to local storage
-    //             setRunningTasks(true); // Set running tasks to true
-    //             setShowAnalysis(true);
-    //             dispatch(setActiveTab('analysis'));
-    //         } else {
-    //             alert(`❌ Pipeline Error: ${response.error}`);
-    //         }
-    //     }
-    //     catch (error) {
-    //         console.error('Error:', error);
-    //     }
-    // }
 
 
 
@@ -271,66 +292,6 @@ const NewProject = () => {
         }
         return taskId;
     }
-
-    // 7. handle output directory
-    const handleOutputDirectory = (e) => {
-       console.log('output directory:', e.target.value);
-    }
-
-    // const handleInputDirectory = async () => {
-    //     // const handle= await window.showDirectoryPicker();
-    //     // const folderPath = handle.name;
-    //     // console.log('input path:', folderPath);
-    //     // setInputDir(folderPath);
-    //     try {
-    //         // Open the directory picker
-    //         const directoryHandle = await window.showDirectoryPicker();
-    //         console.log('Selected Directory:', directoryHandle.name);
-    //         setInputDir(directoryHandle.name); // Set the input directory name
-
-    //         // Iterate through the directory entries
-    //         for await (const [name, handle] of directoryHandle.entries()) {
-    //             if (handle.kind === 'file') {
-    //                 // If the entry is a file, read its contents
-    //                 const file = await handle.getFile();
-    //                 console.log('File Name:', file.name);
-
-    //                 // // Read the file contents (optional)
-    //                 // const reader = new FileReader();
-    //                 // reader.onload = (event) => {
-    //                 //     console.log('File Contents:', event.target.result);
-    //                 // };
-    //                 // reader.readAsText(file); // You can use readAsArrayBuffer or readAsDataURL for other formats
-    //             } else if (handle.kind === 'directory') {
-    //                 // If the entry is a subdirectory, log its name
-    //                 console.log('Subdirectory:', name);
-    //             }
-    //         }
-    //     } catch (error) {
-    //         console.error('Error reading input directory:', error);
-    //     }
-    // }
-
-    // const handleOutputDirectory= async () => {
-    //     const handle= await window.showDirectoryPicker();
-    //     const folderPath = handle.name;
-    //     console.log('output directory:', folderPath);
-    //     setOutputDir(folderPath);
-    // }
-
-    // const createDirectory = async () => {
-    //     try {
-    //       const handle = await window.showDirectoryPicker();
-    //       const newFileHandle = await handle.getFileHandle('example.txt', { create: true });
-    //       const writable = await newFileHandle.createWritable();
-    //       await writable.write('This is a sample file.');
-    //       await writable.close();
-    //       console.log('File created successfully!');
-    //     } catch (error) {
-    //       console.error('Error creating directory or file:', error);
-    //     }
-    //   };
-
 
     return (
         <div className='mx-5 my-10'>
@@ -551,6 +512,7 @@ const NewProject = () => {
                     </TableBody>
                 </Table>
             </div>
+            <ToastContainer />
         </div>
     )
 }

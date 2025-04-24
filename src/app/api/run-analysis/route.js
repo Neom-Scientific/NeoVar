@@ -12,7 +12,7 @@ export let runningTasks = await loadRunningTasks();
 export async function POST(req) {
   try {
     // Parse the request body
-    const { projectName, folderName, testType ,outputDirectory ,numberOfSamples , excelSheet} = await req.json();
+    const { projectName, testType ,outputDirectory ,numberOfSamples , excelSheet , inputDir} = await req.json();
 
     // initialize the counter
     const counter = loadCounters();
@@ -32,7 +32,6 @@ export async function POST(req) {
 
 
     // selecting the input and output directories with the excel sheet
-    const inputDir = path.join(os.tmpdir(), 'uploads' ,folderName);
     const outputDir = path.join(outputDirectory , formattedDateTime);
 
     console.log('outputDir:', outputDir);
@@ -41,6 +40,8 @@ export async function POST(req) {
     // Read the content of the Excel file
     // let NOS=0;
     const excelFile = path.join(inputDir, excelSheet ); // Assuming the Excel file is named 'input.xlsx'
+    console.log('inputDir:', inputDir);
+    console.log('excelFile:', excelFile);
     if (!fs.existsSync(excelFile)) {
       return NextResponse.json({ error: 'Excel file not found' }, { status: 400 });
     }
@@ -51,7 +52,7 @@ export async function POST(req) {
     // console.log('Number of samples:', NOS); // Log the number of samples
 
     // making the path for the files for different testTypes
-    const basePath = path.join(process.cwd(), '../fastq_to_vcf/resources');
+    const basePath = path.join(process.cwd(), './scripts/resources');
     let target, target_interval;
 
     switch (testType) {
@@ -72,8 +73,8 @@ export async function POST(req) {
     }
 
   // creating the script path for the bash scripts
-    const scriptPath1 = path.join(process.cwd(), '../fastq_to_vcf/call_batch.sh');
-    const scriptPath2 = path.join(process.cwd(), '../fastq_to_vcf/NeoVar.sh');
+    const scriptPath1 = path.join(process.cwd(), './scripts/call_batch.sh');
+    const scriptPath2 = path.join(process.cwd(), './scripts/NeoVar.sh');
     const logPath = path.join(outputDir, 'output.log');
 
     
