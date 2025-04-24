@@ -35,8 +35,8 @@ export async function POST(request) {
       const form = formidable({
         multiples: true,
         keepExtensions: true,
-        maxTotalFileSize: 10 * 1024 * 1024 * 1024, // 5GB
-        maxFileSize: 10 * 1024 * 1024 * 1024, // 5GB
+        maxTotalFileSize: 150 * 1024 * 1024 * 1024, // 5GB
+        maxFileSize: 150 * 1024 * 1024 * 1024, // 5GB
       });
 
       form.parse(nodeRequest, (err, fields, files) => {
