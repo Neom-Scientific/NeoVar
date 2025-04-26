@@ -21,20 +21,30 @@ export function saveCounters(counter) {
 }
 
 // generates a unique project ID based on the current date and a counter
-export function generateProjectId(counter) {
+export function generateProjectId(counter=null) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-  if (!counter.projects) {
-    counter.projects = {};
+  let seq;
+  if (counter !== null) {
+    counter += 1;
+    seq = String(counter).padStart(2, '0');
   }
-
-  if (!counter.projects[date]) {
-    counter.projects[date] = 1;
-  } else {
-    counter.projects[date] += 1;
+  else {
+    counter = 1;
+    seq = String(counter).padStart(2, '0');
   }
+  // // console.log('counter:', counter);
+  // if (!counter.projects) {
+  //   counter.projects = {};
+  // }
 
-  const seq = String(counter.projects[date]).padStart(2, '0');
+  // if (!counter.projects[date]) {
+  //   counter.projects[date] = 1;
+  // } else {
+  //   counter.projects[date] += 1;
+  // }
+
+  // const seq = String(counter.projects[date]).padStart(2, '0');
   return `PRJ-${date}-${seq}`;
 }
 

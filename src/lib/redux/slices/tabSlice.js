@@ -2,7 +2,7 @@ const { createSlice } = require("@reduxjs/toolkit");
 
 
 const initialState = {
-    activeTab: "new_project",
+    activeTab: "home",
     taskId: null,
     tab:[
         { value: "home", name: "Home" },

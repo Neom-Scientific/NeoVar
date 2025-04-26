@@ -9,6 +9,7 @@ import {
   saveProjectDetails,
   saveRunningTasks,
 } from '@/lib/idGenerator';
+import db from '@/lib/db';
 
 // Ordered steps for progress tracking
 const progressSteps = [
@@ -28,20 +29,22 @@ const progressSteps = [
 
 export async function POST(req) {
   try {
-    const { taskId } = await req.json();
-    console.log('taskId:', taskId);
+    const { taskId, email } = await req.json();
+    // console.log('taskId:', taskId);
 
     // Load task from JSON file (persistent)
-    const allTasks = await loadRunningTasks();
-    const task = allTasks[taskId];
+    // const allTasks = await loadRunningTasks();
+    // const task = allTasks[taskId];
+    const task = await db.query('SELECT * FROM RunningTasks WHERE projectid = $1', [taskId]);
+    console.log('task:', task.rows);
 
-    if (!task) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    if (task.rowCount === 0) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 200 });
     }
 
-    const { logPath, startTime } = task;
-    console.log('logPath:', logPath);
-    console.log('startTime:', startTime);
+    const logPath = task.rows[0].logpath;
+    const startTime = task.rows[0].starttime;
+
 
     // Read the log file
     let logContent = '';
@@ -74,17 +77,30 @@ export async function POST(req) {
       task.status = 'done';
 
       // Save project details
-      await saveProjectDetails({
-        counter: task.counter,
-        projectId: task.taskId,
-        projectName: task.projectName,
-        analysisStatus: 'done',
-        creationTime: startTime,
-        operation: 'analysis',
-        progress: 100,
-        numberOfSamples: task.numberOfSamples,
-        totalTime: Date.now() - startTime,
-      });
+      // saveProjectDetails({
+      //   counter: task.counter,
+      //   projectId: task.taskId,
+      //   projectName: task.projectName,
+      //   analysisStatus: 'done',
+      //   creationTime: startTime,
+      //   operation: 'analysis',
+      //   progress: 100,
+      //   numberOfSamples: task.numberOfSamples,
+      //   totalTime: Date.now() - startTime,
+      // });
+
+      const counterData = await db.query('INSERT INTO CounterTasks (projectid, projectname, analysistatus, creationtime, progress, numberofsamples, totaltime, counter, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,$9)', [
+        task.rows[0].projectid,
+        task.rows[0].projectname,
+        'done',
+        task.rows[0].starttime,
+        100,
+        task.rows[0].numberofsamples,
+        Date.now() - startTime,
+        task.rows[0].counter,
+        email
+      ]);
+      console.log('counterData:', counterData.rows);
 
       // Cleanup temp files
       if (fs.existsSync(task.inputDir)) {
@@ -95,7 +111,11 @@ export async function POST(req) {
       // }
 
       // Delete task from disk
-      await deleteRunningTask(taskId);
+      db.query(
+        'DELETE FROM RunningTasks WHERE projectid = $1',
+        [taskId]
+      );
+      // deleteRunningTask(taskId);
 
       return NextResponse.json({
         taskId,
@@ -109,12 +129,21 @@ export async function POST(req) {
     }
 
     // Update progress in the file if changed
-    if (!task.progress || task.progress !== progress) {
+
+    if (task.progress == null || task.progress !== progress) {
       task.progress = progress;
       task.status = 'in progress';
       task.done = false;
 
-      await saveRunningTasks(task);
+      // await saveRunningTasks(task);
+      console.log('progress:', progress);
+      console.log('status:', task.status);
+      console.log('task.projectid:', taskId);
+      const progressData = await db.query(
+        'UPDATE RunningTasks SET progress = $1, status = $2 WHERE projectid = $3',
+        [progress, task.status, taskId]
+      );
+      console.log('progress:', progressData.rows);
     }
 
     // Estimate ETA
@@ -123,11 +152,14 @@ export async function POST(req) {
 
     return NextResponse.json({
       taskId,
-      projectName: task.projectName,
-      numberOfSamples: task.numberOfSamples,
-      startTime,
+      projectName: task.rows[0].projectname,
+      numberOfSamples: task.rows[0].numberofsamples,
+      startTime: parseInt(task.rows[0].starttime),
       progress,
       status: 'in progress',
+      inputDir: task.rows[0].inputdir,
+      outputDir: task.rows[0].outputdir,
+      testtype: task.rows[0].testtype,
       eta: `${remainingMinutes} minute(s) left`,
     });
   } catch (error) {

@@ -29,12 +29,14 @@ import * as XLSX from 'xlsx'
 import axios, { all } from 'axios';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { toast, ToastContainer } from 'react-toastify'
+import Cookies from 'js-cookie'
 
 
 // 1. Validation schema
 const formSchema = z.object({
     projectName: z.string().min(1, { message: "Project name is required" }),
     outputDirectory: z.string().min(1, { message: "Output directory is required" }),
+    localDirectory: z.string().min(1, { message: "Local directory is required" }),
     // inputDirectory: z.string().min(1, { message: "Input directory is required" }),
     // testType: z.enum(['exome', 'clinical', 'carrier'], {
     //     required_error: "Test type is required",
@@ -63,10 +65,26 @@ const NewProject = () => {
         defaultValues: {
             projectName: '',
             outputDirectory: '',
+            localDirectory: '',
             // inputDirectory: '',
             // testType: '', // Set default value for testType
         },
     })
+    let email;
+    const user = Cookies.get('user');
+    if (user) {
+        try {
+            const parsedUser = JSON.parse(user);
+            email = parsedUser.email;
+        }
+        catch (error) {
+            console.error('Error parsing user data:', error);
+        }
+    }
+    else {
+        console.log('User data:', user);
+    }
+
 
 
     // 1. Excel sheet input handler
@@ -90,7 +108,7 @@ const NewProject = () => {
         reader.readAsArrayBuffer(file);
     }
 
-    // 3. directory input handler
+    // 2. directory input handler
     const handleDirectory = async (e) => {
         const files = Array.from(e.target.files);
         // console.log('Selected files:', files);
@@ -152,14 +170,14 @@ const NewProject = () => {
         }
     };
 
-    // 4. test type handler
+    // 3. test type handler
     const handleSelectTestType = (e) => {
         const selectedValue = e.target.value;
         setTestType(selectedValue);
     }
 
     let inputDir = '';
-    // 5. Submit handler
+    // 4. Submit handler
     const handleSubmit = async (data) => {
         console.log('data:', data);
 
@@ -256,10 +274,24 @@ const NewProject = () => {
                     outputDirectory: data.outputDirectory,
                     inputDir,
                     numberOfSamples: numberOfSamples,
+                    localDir: data.localDirectory,
                     excelSheet: excelFile?.name,
                     testType: testType,
+                    email: email,
                 });
 
+                if(res.status === 400) {
+                    setShowDialog(false); // Hide dialog
+                    toast.error(res.data.message, {
+                        position: "top-right",
+                        autoClose: 5000,
+                        hideProgressBar: false,
+                        closeOnClick: true,
+                        pauseOnHover: true,
+                        draggable: true,
+                        progress: undefined,
+                    });
+                }
                 if (res.status === 200) {
                     console.log('Analysis started successfully:', res.data);
                 } else {
@@ -281,9 +313,7 @@ const NewProject = () => {
 
     }
 
-
-
-    // 6. save taskId to local storage
+    // 5. save taskId to local storage
     const saveTaskIdToLocalStorage = (taskId) => {
         const existingTaskIds = JSON.parse(localStorage.getItem('taskId')) || [];
         if (!existingTaskIds.includes(taskId)) {
@@ -373,6 +403,50 @@ const NewProject = () => {
                             </Dialog>
                         )}
 
+                        {/* output directory selection */}
+                        <FormField
+                            control={form.control}
+                            name="outputDirectory"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="my-4 text-2xl">Output Directory</FormLabel>
+                                    <Input
+                                        type="text"
+                                        placeholder="paste the path to the output directory here"
+                                        {...field}
+                                        className="w-[50%]"
+                                    />
+                                    {form.formState.errors.outputDirectory && (
+                                        <p className="mt-2 text-sm text-red-500">
+                                            {form.formState.errors.outputDirectory.message}
+                                        </p>
+                                    )}
+                                </FormItem>
+                            )}
+                        />
+
+                        {/* local directory  selection */}
+                        <FormField
+                            control={form.control}
+                            name="localDirectory"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="my-4 text-2xl">Local Directory</FormLabel>
+                                    <Input
+                                        type="text"
+                                        placeholder="Paste the path to the Local Directory here"
+                                        {...field}
+                                        className="w-[50%]"
+                                    />
+                                    {form.formState.errors.localDirectory && (
+                                        <p className="mt-2 text-sm text-red-500">
+                                            {form.formState.errors.localDirectory.message}
+                                        </p>
+                                    )}
+                                </FormItem>
+                            )}
+                        />
+
                         {/* Excel Sheet Upload */}
                         <FormItem>
                             <div className='flex justify-start items-center w-[100%] gap-8'>
@@ -440,33 +514,8 @@ const NewProject = () => {
 
                             )}
                         />
-                        {/* output directory selection */}
-                        <FormField
-                            control={form.control}
-                            name="outputDirectory"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="my-4 text-2xl">output directory</FormLabel>
-                                    <Input
-                                        type="text"
-                                        placeholder="paste the path to the output directory here"
-                                        {...field}
-                                        className="w-[50%]"
-                                    />
-                                    {form.formState.errors.outputDirectory && (
-                                        <p className="mt-2 text-sm text-red-500">
-                                            {form.formState.errors.outputDirectory.message}
-                                        </p>
-                                    )}
-                                </FormItem>
-                            )}
-                        />
 
 
-
-                        {/* <Button type='button' onClick={handleInputDirectory}> select input directory</Button>
-                        <Button type='button' onClick={handleOutputDirectory}> select output directory</Button> */}
-                        {/* Submit Button */}
                         <Button
                             type="submit"
                             className="mt-5 cursor-pointer bg-orange-500 text-white font-bold hover:bg-white hover:border hover:border-orange-500 hover:text-orange-500 transition-transform duration-200 hover:scale-110"
@@ -474,6 +523,7 @@ const NewProject = () => {
                         >
                             Start Analysis
                         </Button>
+
                         {showDialog && (
                             <Dialog open={showDialog} onOpenChange={setShowDialog}>
                                 <DialogContent className="max-w-sm text-center">

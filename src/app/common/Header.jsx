@@ -32,8 +32,8 @@ const Header = () => {
         <header className="flex h-20 w-full shrink-0 items-center px-4 md:px-6 relative">
             {/* Logo for Responsive View */}
             <div className="absolute top-2 right-2 flex items-center lg:hidden py-3">
-                <Image src={logo} height={20} width={20} alt="Varieon" />
-                <span className="ms-2 text-lg text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">Varieon</span>
+                <Image src={logo} height={20} width={20} alt="NeoVar" />
+                <span className="ms-2 text-lg text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">NeoVar</span>
             </div>
 
             <Sheet>
@@ -45,8 +45,8 @@ const Header = () => {
                 </SheetTrigger>
                 <SheetContent side="left">
                     <Link href="#" className="mr-6 hidden lg:flex justify-center items-center" prefetch={false}>
-                        <Image src={logo} height={30} width={30} alt="Varieon" />
-                        <span className="ms-3 text-2xl text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">Varieon</span>
+                        <Image src={logo} height={30} width={30} alt="NeoVar" />
+                        <span className="ms-3 text-2xl text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">NeoVar</span>
                     </Link>
                     <div className="grid gap-2 py-6 p-2">
                         <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">My Account</h2>
@@ -62,8 +62,8 @@ const Header = () => {
             </Sheet>
 
             <Link href="/" className="mr-6 hidden lg:flex items-center" prefetch={false}>
-                <Image src={logo} height={30} width={30} alt="Varieon" />
-                <span className="ms-3 text-2xl text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">Varieon</span>
+                <Image src={logo} height={30} width={30} alt="NeoVar" />
+                <span className="ms-3 text-2xl text-transparent bg-clip-text inline-block bg-gradient-to-r from-orange-600 to-blue-400">NeoVar</span>
             </Link>
 
             <div className="ml-auto hidden lg:flex w-full items-center justify-end">

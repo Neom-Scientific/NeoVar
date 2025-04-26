@@ -51,12 +51,13 @@ export async function POST(request) {
     }
 
     // Create a single upload directory for the session
-    const folderName = path.dirname(files.file[0].originalFilename);
+    
+    const folderName = path.dirname(files.file[1].originalFilename);
     const uploadDir = path.join(tempDir, folderName);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-    console.log('uploadDir:', uploadDir);
+    // console.log('uploadDir:', uploadDir);
 
     const fileList = Array.isArray(files.file) ? files.file : [files.file];
 
@@ -85,7 +86,7 @@ export async function POST(request) {
             .filter(Boolean);
 
           referenceSampleIds.push(...sampleIds);
-          console.log('Extracted Sample IDs:', referenceSampleIds);
+          // console.log('Extracted Sample IDs:', referenceSampleIds);
         } catch (err) {
           console.error('Error processing Excel file:', err);
         } finally {
@@ -119,10 +120,10 @@ export async function POST(request) {
 
           // Normalize referenceSampleIds and find a match
           let normalizedId;
-          console.log('Looking for match for:', baseName);
-          console.log('In sample IDs:', referenceSampleIds);
+          // console.log('Looking for match for:', baseName);
+          // console.log('In sample IDs:', referenceSampleIds);
           const matchedId = referenceSampleIds.find((id) => {
-            console.log('Matching baseName:', baseName);
+            // console.log('Matching baseName:', baseName);
             normalizedId = id.replace(/(_R[12]|_[12])$/, '');
             return baseName === normalizedId; // Use exact matching
           });

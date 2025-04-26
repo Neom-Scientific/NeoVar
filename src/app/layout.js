@@ -12,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Varieon",
+  title: "NeoVar",
   description: "www.neomscientific.com",
 };
 
