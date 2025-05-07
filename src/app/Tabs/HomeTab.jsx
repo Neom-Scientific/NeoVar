@@ -129,16 +129,16 @@ const [counterData, setCounterData] = useState(null);
         }
     }
     else {
-        console.log('User data:', user);
+        // console.log('User data:', user);
     }
 
   useEffect(() => {
     const fetchCounterData = async () => {
       try {
         const response = await axios.get(`/api/read-counter-json?email=${email}`);
-        // console.log('Counter data:', response.data);
+        // // console.log('Counter data:', response.data);
         if(response.data.error){
-          // console.log(response.data.error);
+          // // console.log(response.data.error);
           setNotFound(response.data.error);
         }
         setCounterData(response.data);

@@ -6,8 +6,7 @@ import ClientLayout from "./client-layout";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-inter",
-  preload: false,
+
   display: "swap",
 });
 
@@ -20,7 +19,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} antialiased`}
+        className={`antialiased`}
       >
         <ClientLayout>{children}</ClientLayout>
       </body>

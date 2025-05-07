@@ -37,11 +37,7 @@ const formSchema = z.object({
     projectName: z.string().min(1, { message: "Project name is required" }),
     outputDirectory: z.string().min(1, { message: "Output directory is required" }),
     localDirectory: z.string().min(1, { message: "Local directory is required" }),
-    // inputDirectory: z.string().min(1, { message: "Input directory is required" }),
-    // testType: z.enum(['exome', 'clinical', 'carrier'], {
-    //     required_error: "Test type is required",
-    //     invalid_type_error: "Test type must be one of 'exome', 'clinical', or 'carrier'",
-    // }),
+    // testType: z.string().min(1, { message: "Test type is required" }),
 })
 
 const NewProject = () => {
@@ -58,6 +54,7 @@ const NewProject = () => {
     const [testType, setTestType] = useState('');
     const [showDialog, setShowDialog] = useState(false);
     const [numberOfSamples, setNumberOfSamples] = useState(0);
+    const [testTypeName, setTestTypeName] = useState('')
 
     // 2. Setup form
     const form = useForm({
@@ -66,8 +63,7 @@ const NewProject = () => {
             projectName: '',
             outputDirectory: '',
             localDirectory: '',
-            // inputDirectory: '',
-            // testType: '', // Set default value for testType
+            // testType: 'select', // Set default value for testType
         },
     })
     let email;
@@ -82,7 +78,7 @@ const NewProject = () => {
         }
     }
     else {
-        console.log('User data:', user);
+        // console.log('User data:', user);
     }
 
 
@@ -98,7 +94,7 @@ const NewProject = () => {
             const sheetName = workbook.SheetNames[0];
             const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
 
-            // console.log('📊 Parsed Sheet Data:', sheetData);
+            // // console.log('📊 Parsed Sheet Data:', sheetData);
             const sample = sheetData.length;
             setNumberOfSamples(sample);
 
@@ -111,7 +107,7 @@ const NewProject = () => {
     // 2. directory input handler
     const handleDirectory = async (e) => {
         const files = Array.from(e.target.files);
-        // console.log('Selected files:', files);
+        // // console.log('Selected files:', files);
 
         if (files.length === 0) {
             setSelectedFolder(''); // Reset if no folder is selected
@@ -173,13 +169,15 @@ const NewProject = () => {
     // 3. test type handler
     const handleSelectTestType = (e) => {
         const selectedValue = e.target.value;
-        setTestType(selectedValue);
+        const selectedName = e.target.options[e.target.selectedIndex].getAttribute('name'); // Get the name attribute
+        setTestTypeName(selectedValue);
+        setTestType(selectedName);
     }
 
     let inputDir = '';
     // 4. Submit handler
     const handleSubmit = async (data) => {
-        console.log('data:', data);
+        // console.log('data:', data);
 
         let allUploadsSuccessful = true;
 
@@ -199,10 +197,11 @@ const NewProject = () => {
         formData.append('project', selectedFolder);
 
         try {
+            formData.append('email', email);
             setShowDialog(true); // Show dialog
-            console.log('formData:', formData);
+            // console.log('formData:', formData);
             const res = await axios.post('/api/uploads', formData);
-            console.log('res:', res);
+            // console.log('res:', res);
             inputDir = res.data[0].inputDir;
 
             if (res.data[0].status === 400) {
@@ -217,45 +216,8 @@ const NewProject = () => {
         } catch (err) {
             console.error('Error uploading:', err);
             allUploadsSuccessful = false;
+            setShowDialog(false); // Hide dialog
         }
-
-        // let allUploadsSuccessful = true;
-        // for (let i = 0; i < Files.length; i++) {
-        //     const formData = new FormData();
-        //     formData.append('file', Files[i]);
-        //     formData.append('project', selectedFolder); // Folder name based on project
-
-        //     // Append Excel file only for the first file
-        //     if (i === 0 && excelFile) {
-        //         formData.append('file', excelFile);
-        //     }
-
-        //     try {
-        //         setShowDialog(true); // Show dialog
-        //         const res = await axios.post('/api/uploads', formData);
-        //         console.log('res:', res);
-        //         inputDir=res.data[0].inputDir
-
-        //         if(res.data[0].status === 400){
-        //             allUploadsSuccessful = false; // Set to false if any upload fails
-        //             setShowDialog(false); // Hide dialog
-        //             toast.error(res.data[0].message, {
-        //                 position: "top-right",
-        //                 autoClose: 5000,
-        //                 hideProgressBar: false,
-        //                 closeOnClick: true,
-        //                 pauseOnHover: true,
-        //                 draggable: true,
-        //                 progress: undefined,
-        //             });
-        //            break;
-        //         }
-
-
-        //     } catch (err) {
-        //         console.error('Error uploading:', err);
-        //     }
-        // }
 
         try {
             if (allUploadsSuccessful) {
@@ -280,35 +242,35 @@ const NewProject = () => {
                     email: email,
                 });
 
-                if(res.status === 400) {
-                    setShowDialog(false); // Hide dialog
-                    toast.error(res.data.message, {
-                        position: "top-right",
-                        autoClose: 5000,
-                        hideProgressBar: false,
-                        closeOnClick: true,
-                        pauseOnHover: true,
-                        draggable: true,
-                        progress: undefined,
-                    });
-                }
-                if (res.status === 200) {
-                    console.log('Analysis started successfully:', res.data);
-                } else {
-                    console.error('Error starting analysis:', res.statusText);
-                }
+                console.log('res:', res);
+                if (res.status !== 200) return console.error('Error starting analysis:', res);
+                
                 // setTaskId(res.data.taskId); // Store the task ID for progress tracking
                 setShowDialog(false); // Hide dialog
                 saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
                 setRunningTasks(true); // Set running tasks to true
-                // console.log('Task ID:', taskId);
+                // // console.log('Task ID:', taskId);
                 dispatch(setActiveTab('analysis'));
                 setShowAnalysis(true);
             }
-
+            
         }
         catch (error) {
-            console.error('Error:', error);
+            console.error('Error:', error.response);
+
+
+            if(error.response && error.response.status === 400) {
+                setShowDialog(false); // Hide dialog
+                toast.error(error.response.data.message, {
+                    position: "top-right",
+                    autoClose: 5000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    progress: undefined,
+                });
+            }
         }
 
     }
@@ -489,10 +451,10 @@ const NewProject = () => {
                                         className="w-[50%] border rounded-md p-2"
                                         onChange={handleSelectTestType}
                                     >
-                                        <option value="">Select Test Type</option>
-                                        <option value="exome">Exome</option>
-                                        <option value="clinical">Clinical Exome</option>
-                                        <option value="carrier">Carrier Screening</option>
+                                        <option value="select">Select Test Type</option>
+                                        <option name="exome" value="Exome">Exome</option>
+                                        <option name="clinical" value="Clinical Exome">Clinical Exome</option>
+                                        <option name="carrier" value="Carrier Screening">Carrier Screening</option>
                                     </select>
 
                                     {/* {form.formState.errors.testType && (
@@ -507,7 +469,7 @@ const NewProject = () => {
                                     )} */}
                                     {testType && (
                                         <p className="mt-2 text-sm text-muted-foreground">
-                                            Selected Test Type: <strong>{testType}</strong>
+                                            Selected Test Type: <strong>{testTypeName}</strong>
                                         </p>
                                     )}
                                 </FormItem>

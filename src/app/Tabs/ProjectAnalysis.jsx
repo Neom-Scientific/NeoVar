@@ -27,7 +27,7 @@ const ProjectAnalysis = () => {
          }
      }
      else {
-         console.log('User data:', user);
+         // console.log('User data:', user);
      }
   useEffect(() => {
     const fetchCounterData = async () => {
@@ -103,7 +103,7 @@ const ProjectAnalysis = () => {
     return () => intervals.forEach(clearInterval); // Cleanup all intervals on unmount
   }, [callCompleted]);
 
-  // console.log('progressData:', progressData);
+  // // console.log('progressData:', progressData);
 
   const handleOpenDialog=(taskData)=>{
     setSelectedTask(taskData);
@@ -238,7 +238,7 @@ const ProjectAnalysis = () => {
 export default ProjectAnalysis;
 
 const HandleDialog = ({ data, onClose }) => {
-  // console.log('data:', data);
+  // // console.log('data:', data);
   return (
     <div>
       <Dialog open={true} onOpenChange={onClose}>

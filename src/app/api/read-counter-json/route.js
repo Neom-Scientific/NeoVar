@@ -7,19 +7,19 @@ const counterFile = path.join(process.cwd(), 'counter.json'); // adjust path as 
 
 export async function GET(req) {
     const email = req.nextUrl.searchParams.get('email'); // Correctly extract the email
-    // console.log('email:', email);
+    // // console.log('email:', email);
     try {
         if (!email) {
             return NextResponse.json({ error: 'Email parameter is required' }, { status: 400 });
         }
 
         const counterData = await db.query('SELECT * FROM CounterTasks WHERE email = $1', [email]);
-        // console.log('counterData:', counterData);
+        // // console.log('counterData:', counterData);
         if (counterData.rowCount === 0) {
             return NextResponse.json({ error: 'No project found' }, { status: 200 });
         }
         const counter = counterData.rows;
-        // console.log('counter:', counter);
+        // // console.log('counter:', counter);
 
         // Return the email in the response
         return NextResponse.json( counter );

@@ -33,7 +33,7 @@ export function generateProjectId(counter=null) {
     counter = 1;
     seq = String(counter).padStart(2, '0');
   }
-  // // console.log('counter:', counter);
+  // // // console.log('counter:', counter);
   // if (!counter.projects) {
   //   counter.projects = {};
   // }

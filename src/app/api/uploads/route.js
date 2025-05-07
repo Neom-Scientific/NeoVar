@@ -7,6 +7,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import formidable from 'formidable';
 import * as XLSX from 'xlsx';
+import db from '@/lib/db';
 
 export const config = {
   api: {
@@ -23,7 +24,6 @@ function toNodeRequest(request) {
 }
 
 export async function POST(request) {
-
 
   try {
     const nodeRequest = toNodeRequest(request); // stream + headers
@@ -44,6 +44,8 @@ export async function POST(request) {
         else resolve({ fields, files });
       });
     });
+    const email = fields.email[0];
+    console.log('email:', email);
 
     const tempDir = path.join(os.tmpdir(), 'uploads');
     if (!fs.existsSync(tempDir)) {
@@ -57,25 +59,43 @@ export async function POST(request) {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-    // console.log('uploadDir:', uploadDir);
+    // // console.log('uploadDir:', uploadDir);
 
     const fileList = Array.isArray(files.file) ? files.file : [files.file];
 
     const referenceSampleIds = [];
-
+    let result = [];
     // Phase 1: Process Excel files first
-    fileList.forEach((file) => {
+    for (const file of fileList) {
       const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
       const lowerCaseDestPath = destPath.toLowerCase();
-
+    
       if (lowerCaseDestPath.endsWith('.xls') || lowerCaseDestPath.endsWith('.xlsx')) {
         try {
           fs.copyFileSync(file.filepath, destPath);
-          console.log('Excel copied to:', destPath);
+          // console.log('Excel copied to:', destPath);
           const fileBuffer = fs.readFileSync(destPath);
           const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
           const sheetName = workbook.SheetNames[0];
           const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+          const numberofsamples = sheetData.length;
+          if(numberofsamples >25){
+            result.push({
+              message: `You can only upload 25 samples at a time`,
+              status: 400,
+            })
+          }
+          const credits = await db.query('SELECT credits from register_data where email = $1', [email]);
+          const counter = credits.rows[0].credits;
+          if (counter < numberofsamples) {
+            result.push({
+              message: `You have ${counter} Counters left`,
+              status: 400,
+            })
+          }
+          else{
+            db.query('UPDATE register_data SET credits = $1 WHERE email = $2', [counter - numberofsamples, email]); 
+          }
 
           const sampleIds = sheetData
             // .map(row => row['Sample ID']?.toString().trim())
@@ -86,7 +106,7 @@ export async function POST(request) {
             .filter(Boolean);
 
           referenceSampleIds.push(...sampleIds);
-          // console.log('Extracted Sample IDs:', referenceSampleIds);
+          // // console.log('Extracted Sample IDs:', referenceSampleIds);
         } catch (err) {
           console.error('Error processing Excel file:', err);
         } finally {
@@ -97,10 +117,10 @@ export async function POST(request) {
           }
         }
       }
-    });
+    };
 
     // Phase 2: Process FASTQ files with populated referenceSampleIds
-    let result = [];
+    
     for (const file of fileList) {
       const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
       const lowerCaseDestPath = destPath.toLowerCase();
@@ -120,16 +140,16 @@ export async function POST(request) {
 
           // Normalize referenceSampleIds and find a match
           let normalizedId;
-          // console.log('Looking for match for:', baseName);
-          // console.log('In sample IDs:', referenceSampleIds);
+          // // console.log('Looking for match for:', baseName);
+          // // console.log('In sample IDs:', referenceSampleIds);
           const matchedId = referenceSampleIds.find((id) => {
-            // console.log('Matching baseName:', baseName);
+            // // console.log('Matching baseName:', baseName);
             normalizedId = id.replace(/(_R[12]|_[12])$/, '');
             return baseName === normalizedId; // Use exact matching
           });
 
           if (matchedId) {
-            console.log(`✅ File "${file.originalFilename}" matches Sample ID: ${matchedId}`);
+            // console.log(`✅ File "${file.originalFilename}" matches Sample ID: ${matchedId}`);
 
             // const inputDir = path.join('/tmp/input'); // or use a dynamic path if needed
             if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -137,7 +157,7 @@ export async function POST(request) {
             const targetPath = path.join(uploadDir, path.basename(destPath));
             fs.copyFileSync(destPath, targetPath);
 
-            console.log(`✅ File copied to input directory: ${targetPath}`);
+            // console.log(`✅ File copied to input directory: ${targetPath}`);
             result.push({
               message: `${file.originalFilename} copied to input directory`,
               status: 200,
@@ -176,107 +196,3 @@ export async function POST(request) {
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });
   }
 }
-
-// for (const file of fileList) {
-//   const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
-//   const lowerCaseDestPath = destPath.toLowerCase();
-
-//   if (
-//     lowerCaseDestPath.endsWith('.fastq') ||
-//     lowerCaseDestPath.endsWith('.fastq.gz') ||
-//     lowerCaseDestPath.endsWith('.fq') ||
-//     lowerCaseDestPath.endsWith('.fq.gz')
-//   ) {
-//     try {
-//       for (let i = 0; i <= fileList.length; i++) {
-//         fs.copyFileSync(file.filepath, destPath);
-//         let baseName = path.basename(file.originalFilename || '').split('.')[0];
-//         baseName = baseName.replace(/(_R[12]|_[12])$/, ''); // Remove _R1, _R2, or _1, _2
-
-//         console.log('basename:', baseName);
-
-//         const matchedId = referenceSampleIds.find(id =>
-//           baseName.includes(id)
-//         );
-
-
-//         if (matchedId) {
-//           // const inputDir = path.join('/tmp/input');
-//           if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-//           const targetPath = path.join(uploadDir, path.basename(destPath));
-//           fs.copyFileSync(destPath, targetPath);
-//           console.log(`✅ File copied to input directory: ${targetPath}`);
-//           // response = new NextResponse({ message: `${file.originalFilename} copied to input directory`, status: 200 });
-//           result.push({
-//             message: `${file.originalFilename} copied to input directory`,
-//             status: 200,
-//             inputDir: uploadDir,
-//             filePath: targetPath,
-//           })
-//         } else {
-//           console.error(`❌ File "${file.originalFilename}" does not match any Sample ID from Excel.`);
-//           fs.unlinkSync(destPath);
-//           // response = new NextResponse({ message: `${file.originalFilename} does not match from Excel`, status: 400 });
-//           result.push({
-//             message: `${file.originalFilename} does not match from Excel`,
-//             status: 400,
-//             filePath: destPath,
-//           })
-//         }
-//       }
-//     } catch (error) {
-//       console.error('Error processing FASTQ file:', error);
-//     } finally {
-//       try {
-//         fs.unlinkSync(file.filepath);
-//       } catch (err) {
-//         console.warn('Temp file deletion failed:', err.message);
-//       }
-//     }
-//   }
-// }
-
-// fileList.forEach(file => {
-//   const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
-
-//   // Normalize the case for comparison
-//   const lowerCaseDestPath = destPath.toLowerCase();
-//   // Check for both .xls and .xlsx extensions
-
-//   try {
-//     fs.copyFileSync(file.filepath, destPath);
-//     console.log('File copied:', destPath);
-
-//     if (lowerCaseDestPath.endsWith('.xls') || lowerCaseDestPath.endsWith('.xlsx')) {
-//       if (!fs.existsSync(destPath)) {
-//         console.error('Excel file does not exist:', destPath);
-//         return;
-//       }
-
-//       const fileBuffer = fs.readFileSync(destPath);
-
-//       try {
-//         const workbook = XLSX.read(fileBuffer, { type: 'buffer' }); // better than `readFile()`
-//         const sheetName = workbook.SheetNames[0];
-//         const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-//         console.log('Excel Data:', sheetData);
-//       } catch (err) {
-//         console.error('XLSX.read buffer failed:', err);
-//       }
-
-//       const header = fileBuffer.subarray(0, 8).toString('hex');
-
-//     }
-//   } catch (error) {
-//     console.error('Error handling Excel file:', error);
-//   } finally {
-//     try {
-//       fs.unlinkSync(file.filepath); // Only delete temp if safe
-//     } catch (err) {
-//       console.warn('Temp file deletion failed:', err.message);
-//     }
-//   }
-
-// });
-
-// const response = new NextResponse({ message: 'file uploaded successfully', status: 200 });

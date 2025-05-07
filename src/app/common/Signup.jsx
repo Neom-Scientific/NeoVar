@@ -37,11 +37,11 @@ const Signup = ({ setSignIn }) => {
     })
 
     const onSubmit = async (data) => {
-        // console.log('Signup data:', data)
+        // // console.log('Signup data:', data)
         try {
             // const response=await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/signup`, data);
             const response = await axios.post('/api/auth/signup', data);
-            console.log('reponse:', response);
+            // console.log('reponse:', response);
             toast.success(response.data.message, {
                 position: "top-right",
                 autoClose: 5000,
@@ -86,7 +86,7 @@ const Signup = ({ setSignIn }) => {
                     progress: undefined,
                 });
             }
-            console.log('Error during signup:', error);
+            // console.log('Error during signup:', error);
         }
     }
 
@@ -145,8 +145,8 @@ const Signup = ({ setSignIn }) => {
                             </FormItem>
                         )}
                     />
-                    <Button type="submit" className="w-full mt-4 cursor-pointer">Submit</Button>
-                    <Button type="button" className="w-full mt-2 cursor-pointer" onClick={() => form.reset()}>Reset</Button>
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-orange-500">Submit</Button>
+                    <Button type="button" className="w-full mt-2 cursor-pointer bg-orange-500" onClick={() => form.reset()}>Reset</Button>
                 </form>
             </Form>
             <ToastContainer />
