@@ -70,6 +70,13 @@ const Signin = () => {
         position: "top-right",
         autoClose: 5000,
       });
+
+      setIsOtpDisabled(true); // Disable the button after sending OTP
+
+      setTimeout(() => {
+        setIsOtpDisabled(false); // Re-enable the button after 1 minute
+      }, 60000); // 1 minute in milliseconds
+      
     } catch (error) {
       console.error('Error:', error);
 
