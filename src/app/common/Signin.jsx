@@ -44,7 +44,7 @@ const Signin = () => {
     e.preventDefault();
     const email = form.getValues("email");
     const password = form.getValues("password");
-  
+
     if (!email) {
       toast.error('Please enter your email address.', {
         position: "top-right",
@@ -52,7 +52,7 @@ const Signin = () => {
       });
       return;
     }
-  
+
     if (!password) {
       toast.error('Please enter your password.', {
         position: "top-right",
@@ -60,11 +60,11 @@ const Signin = () => {
       });
       return;
     }
-  
+
     try {
       // Send OTP request
       const response = await axios.post('/api/auth/send-otp', { email, password });
-  
+
       // Show success toast
       toast.success('OTP sent successfully!', {
         position: "top-right",
@@ -72,7 +72,7 @@ const Signin = () => {
       });
     } catch (error) {
       console.error('Error:', error);
-  
+
       // Handle specific error responses
       if (error.response && error.response.status === 401) {
         toast.error(error.response.data.message, {
@@ -86,7 +86,7 @@ const Signin = () => {
           autoClose: 5000,
         });
       }
-  
+
       // Prevent error propagation
       return; // Ensure the error does not propagate further
     }
@@ -165,7 +165,7 @@ const Signin = () => {
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input placeholder="Email" {...field} />
+                  <Input className="focus-within:ring-orange-500" placeholder="Email" {...field} />
                 </FormControl>
               </FormItem>
             )}
@@ -177,19 +177,34 @@ const Signin = () => {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
-                <FormControl >
-                  <div className="grid grid-cols-12 border border-gray-200 rounded-md items-center">
-                    <div className='col-span-11'>
-                      <Input type={`${passwordVisible ? "text" : "password"}`} className="border-0 rounded-0 focus:outline-none" placeholder="Password" {...field} />
-                    </div>
-                    <div className='col-span-1 cursor-pointer' onClick={() => setPasswordVisible(!passwordVisible)}>
-                      {passwordVisible ? <span className='  '><FaEye /></span> : <span className=' '><FaEyeSlash /></span>}
-                    </div>
+                <FormControl>
+                  <div
+                    className={`flex items-center border rounded-md focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500`}
+                  >
+                    <input
+                      type={passwordVisible ? "text" : "password"}
+                      className="flex-1 px-3 py-2 rounded-md outline-none focus:ring-0 focus:border-none"
+                      placeholder="Password"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      className="px-3 py-2 bg-white border-l border-gray-300 flex items-center justify-center focus:outline-none"
+                      onClick={() => setPasswordVisible(!passwordVisible)}
+                    >
+                      {passwordVisible ? <FaEye /> : <FaEyeSlash />}
+                    </button>
                   </div>
                 </FormControl>
+                {form.formState.errors.password && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {form.formState.errors.password.message}
+                  </p>
+                )}
               </FormItem>
             )}
           />
+
 
           <FormField
             control={form.control}
@@ -198,7 +213,7 @@ const Signin = () => {
               <FormItem>
                 <FormLabel>OTP</FormLabel>
                 <FormControl>
-                  <Input type="text" placeholder="OTP" {...field} />
+                  <Input className="focus-within:ring-orange-500" type="text" placeholder="OTP" {...field} />
                 </FormControl>
                 {form.formState.errors.otp && (
                   <p className="text-red-500 text-sm mt-1">{form.formState.errors.otp.message}</p>

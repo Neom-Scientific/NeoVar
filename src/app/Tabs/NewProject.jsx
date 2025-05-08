@@ -221,7 +221,7 @@ const NewProject = () => {
 
         try {
             if (allUploadsSuccessful) {
-                toast.success('Files uploaded successfully', {
+                toast.success('Analysis Completed', {
                     position: "top-right",
                     autoClose: 5000,
                     hideProgressBar: false,
@@ -301,7 +301,7 @@ const NewProject = () => {
                                         type="text"
                                         placeholder="Project Name"
                                         {...field}
-                                        className="w-[50%] "
+                                        className="w-[50%] focus-within:ring-orange-500 "
                                     />
                                     {form.formState.errors.projectName && (
                                         <p className="mt-2 text-sm text-red-500">
@@ -326,7 +326,7 @@ const NewProject = () => {
                                         directory="true"
                                         multiple
                                         {...field}
-                                        className="w-[50%] cursor-pointer"
+                                        className="w-[50%] cursor-pointer focus-within:ring-orange-500"
                                         placeholder="Input Directory"
                                         onChange={handleDirectory}
                                         disabled={isUploading} // Disable input during upload
@@ -376,7 +376,7 @@ const NewProject = () => {
                                         type="text"
                                         placeholder="paste the path to the output directory here"
                                         {...field}
-                                        className="w-[50%]"
+                                        className="w-[50%] focus-within:ring-orange-500"
                                     />
                                     {form.formState.errors.outputDirectory && (
                                         <p className="mt-2 text-sm text-red-500">
@@ -398,7 +398,7 @@ const NewProject = () => {
                                         type="text"
                                         placeholder="Paste the path to the Local Directory here"
                                         {...field}
-                                        className="w-[50%]"
+                                        className="w-[50%] focus-within:ring-orange-500"
                                     />
                                     {form.formState.errors.localDirectory && (
                                         <p className="mt-2 text-sm text-red-500">
@@ -419,7 +419,7 @@ const NewProject = () => {
                                         accept=".xls,.xlsx"
                                         name="excelSheet"
                                         placeholder="Upload Excel Sheet"
-                                        className="border rounded-md cursor-pointer p-2"
+                                        className="border rounded-md cursor-pointer p-2 focus-within:ring-orange-500"
                                         onChange={handleSheetData}
                                     />
                                     <p className="mt-2 text-sm text-muted-foreground">
@@ -448,7 +448,7 @@ const NewProject = () => {
                                     <FormLabel className="my-4 text-2xl">Select the Type of Test</FormLabel>
                                     <select
                                         {...field}
-                                        className="w-[50%] border rounded-md p-2"
+                                        className="w-[50%] border rounded-md p-2 focus-within:ring-orange-500"
                                         onChange={handleSelectTestType}
                                     >
                                         <option value="select">Select Test Type</option>

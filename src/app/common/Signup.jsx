@@ -18,7 +18,7 @@ const formSchema = z.object({
     password: z.string().min(6),
     confirmPassword: z.string().min(6),
 }).refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
+    message: "Passwords does not match",
     path: ["confirmPassword"],
 })
 
@@ -51,7 +51,7 @@ const Signup = ({ setSignIn }) => {
                 draggable: true,
                 progress: undefined,
             });
-            setSignIn((prev)=>!prev)
+            setSignIn((prev) => !prev)
             if (response.status === 409) {
                 toast.error(response.data.error, {
                     position: "top-right",
@@ -102,8 +102,11 @@ const Signup = ({ setSignIn }) => {
                             <FormItem>
                                 <FormLabel>Email</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="Email" {...field} />
+                                    <Input className="focus-within:ring-orange-500" placeholder="Email" {...field} />
                                 </FormControl>
+                                {form.formState.errors.email && (
+                                    <p className="text-red-500 text-sm mt-1">{form.formState.errors.email.message}</p>
+                                )}
                             </FormItem>
                         )}
                     />
@@ -113,38 +116,68 @@ const Signup = ({ setSignIn }) => {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Password</FormLabel>
-                                <FormControl >
-                                    <div className="grid grid-cols-12 border border-gray-200 rounded-md items-center">
-                                        <div className='col-span-11'>
-                                            <Input type={`${passwordVisible ? "text" : "password"}`} className="border-0 rounded-0 focus:outline-none" placeholder="Password" {...field} />
-                                        </div>
-                                        <div className='col-span-1 cursor-pointer' onClick={() => setPasswordVisible(!passwordVisible)}>
-                                            {passwordVisible ? <span className='  '><FaEye /></span> : <span className=' '><FaEyeSlash /></span>}
-                                        </div>
+                                <FormControl>
+                                    <div
+                                        className={`flex items-center border rounded-md focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500`}
+                                    >
+                                        <input
+                                            type={passwordVisible ? "text" : "password"}
+                                            className="flex-1 px-3 py-2 rounded-md outline-none focus:ring-0 focus:border-none"
+                                            placeholder="Password"
+                                            {...field}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="px-3 py-2 bg-white border-l border-gray-300 flex items-center justify-center focus:outline-none"
+                                            onClick={() => setPasswordVisible(!passwordVisible)}
+                                        >
+                                            {passwordVisible ? <FaEye /> : <FaEyeSlash />}
+                                        </button>
                                     </div>
                                 </FormControl>
+                                {form.formState.errors.password && (
+                                    <p className="text-red-500 text-sm mt-1">
+                                        {form.formState.errors.password.message}
+                                    </p>
+                                )}
                             </FormItem>
                         )}
                     />
+
                     <FormField
                         control={form.control}
                         name="confirmPassword"
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Confirm Password</FormLabel>
-                                <FormControl >
-                                    <div className="grid grid-cols-12 border border-gray-200 rounded-md items-center">
-                                        <div className='col-span-11'>
-                                            <Input type={`${confirmPasswordVisible ? "text" : "password"}`} className="border-0 rounded-0 focus:outline-none" placeholder="Password" {...field} />
-                                        </div>
-                                        <div className='col-span-1 cursor-pointer' onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}>
-                                            {confirmPasswordVisible ? <span className='  '><FaEye /></span> : <span className=' '><FaEyeSlash /></span>}
-                                        </div>
+                                <FormControl>
+                                    <div
+                                        className={`flex items-center border rounded-md focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500`}
+                                    >
+                                        <input
+                                            type={confirmPasswordVisible ? "text" : "password"}
+                                            className="flex-1 px-3 py-2 rounded-md outline-none focus:ring-0 focus:border-none"
+                                            placeholder="Confirm Password"
+                                            {...field}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="px-3 py-2 bg-white border-l border-gray-300 flex items-center justify-center focus:outline-none"
+                                            onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                                        >
+                                            {confirmPasswordVisible ? <FaEye /> : <FaEyeSlash />}
+                                        </button>
                                     </div>
                                 </FormControl>
+                                {form.formState.errors.confirmPassword && (
+                                    <p className="text-red-500 text-sm mt-1">
+                                        {form.formState.errors.confirmPassword.message}
+                                    </p>
+                                )}
                             </FormItem>
                         )}
                     />
+
                     <Button type="submit" className="w-full mt-4 cursor-pointer bg-orange-500">Submit</Button>
                     <Button type="button" className="w-full mt-2 cursor-pointer bg-orange-500" onClick={() => form.reset()}>Reset</Button>
                 </form>

@@ -89,7 +89,7 @@ export async function POST(req) {
     // creating the script path for the bash scripts
     const scriptPath1 = path.join(process.cwd(), './scripts/call_batch.sh');
     const scriptPath2 = path.join(process.cwd(), './scripts/NeoVar.sh');
-    const logPath = path.join(outputDir, 'output.log');
+    const logPath = path.join(process.cwd(), './scripts/logs', `${taskId}.log`);
 
     // let counter;
     // let counter = await db.query('SELECT credits FROM register_data where email = $1', [email]);
