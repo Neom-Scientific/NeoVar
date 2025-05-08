@@ -3,12 +3,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import {
-  deleteRunningTask,
-  loadRunningTasks,
-  saveProjectDetails,
-  saveRunningTasks,
-} from '@/lib/idGenerator';
+import os from 'os';
 import db from '@/lib/db';
 
 // Ordered steps for progress tracking
@@ -44,6 +39,7 @@ export async function POST(req) {
 
     const logPath = task.rows[0].logpath;
     const startTime = task.rows[0].starttime;
+    const resources_path = path.join(os.tmpdir(), `.resources_${taskId}`);
 
 
     // Read the log file
@@ -89,6 +85,7 @@ export async function POST(req) {
       //   totalTime: Date.now() - startTime,
       // });
 
+      fs.rmSync(resources_path, { recursive: true, force: true });
       const counterData = await db.query('INSERT INTO CounterTasks (projectid, projectname, analysistatus, creationtime, progress, numberofsamples, totaltime, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [
         task.rows[0].projectid,
         task.rows[0].projectname,
@@ -99,22 +96,18 @@ export async function POST(req) {
         Date.now() - startTime,
         email
       ]);
-      // console.log('counterData:', counterData.rows);
 
       // Cleanup temp files
       if (fs.existsSync(task.inputDir)) {
         fs.rmSync(task.inputDir, { recursive: true, force: true });
       }
-      // if (fs.existsSync(task.excelPath)) {
-      //   fs.rmSync(task.excelPath, { recursive: true, force: true });
-      // }
+      
 
       // Delete task from disk
       db.query(
         'DELETE FROM RunningTasks WHERE projectid = $1',
         [taskId]
       );
-      // deleteRunningTask(taskId);
 
       return NextResponse.json({
         taskId,

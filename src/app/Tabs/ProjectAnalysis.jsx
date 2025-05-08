@@ -117,7 +117,7 @@ const ProjectAnalysis = () => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Project Number</TableHead>
+            <TableHead>Project ID</TableHead>
             <TableHead>Project Name</TableHead>
             <TableHead>Analysis Progress</TableHead>
             <TableHead>Creation Time</TableHead>
@@ -246,7 +246,7 @@ const HandleDialog = ({ data, onClose }) => {
           <DialogTitle>Task Details</DialogTitle>
           <div className=''>
             <div className="flex justify-between">
-              <span>Task ID:</span>
+              <span>Project ID:</span>
               <span>{data.taskId}</span>
             </div>
             <div className="flex justify-between">
@@ -261,10 +261,10 @@ const HandleDialog = ({ data, onClose }) => {
               <span>Status:</span>
               <span>{data.status}</span>
             </div>
-            <div className="flex justify-between">
+            {/* <div className="flex justify-between">
               <span>Input Directory:</span>
               <span>{data.inputDir}</span>
-            </div>
+            </div> */}
             <div className="flex justify-between">
               <span>Output Directory:</span>
               <span className='text-[13px]'>{data.outputDir}</span>

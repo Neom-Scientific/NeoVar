@@ -24,24 +24,17 @@ export async function POST(req) {
     if (getRunningTasks.rowCount > 0) {
       return NextResponse.json({ message: 'One task is already in Running' }, { status: 400 });
     }
-    // if (getRunningTasks.rowCount > 0) {
-    //   // Check if the task is already running
-    //   const length = getRunningTasks.rows.length;
-    //   taskId = generateProjectId(length);
-    // }
-    // else{
-    //   taskId = generateProjectId();
-    // }
+
     if (getCounterTasks.rowCount === 0 && getRunningTasks.rowCount === 0) {
       taskId = generateProjectId();
     }
+
     else if (getCounterTasks.rowCount > 0) {
       const length = getCounterTasks.rows.length;
       taskId = generateProjectId(length);
     }
 
 
-    // console.log('taskId:', taskId);
     // creating the name for the output folder
     const startTime = Date.now();
     const date = new Date();
@@ -53,9 +46,7 @@ export async function POST(req) {
     // selecting the input and output directories with the excel sheet
     const outputDir = path.join(outputDirectory, formattedDateTime);
 
-    // const outputDir="/media/strive/Strive/NewFolder2/2025-4-25_13-8-48"
 
-    // // console.log('outputDir:', outputDir);
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Read the content of the Excel file
@@ -65,8 +56,32 @@ export async function POST(req) {
       return NextResponse.json({ message: 'Excel file not found' }, { status: 400 });
     }
 
+
+    const tempDir = path.join(os.tmpdir(), `.resources_${taskId}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    const encFile = path.join(process.cwd(), './scripts/resources.tar.enc');
+    const tarFile = path.join(process.cwd(), './scripts/resources.tar');
+    const password = 'v99tHbCgLzll6JL';
+
+    // Decrypt the .tar.enc file
+    await new Promise((resolve, reject) => {
+      exec(
+        `openssl enc -d -aes-256-cbc -in "${encFile}" -out "${tarFile}" -k "${password}"`,
+        (err, stdout, stderr) => (err ? reject(err) : resolve())
+      );
+    });
+
+    // Extract the decrypted .tar file
+    await new Promise((resolve, reject) => {
+      exec(
+        `tar -xvf "${tarFile}" -C "${tempDir}"`,
+        (err, stdout, stderr) => (err ? reject(err) : resolve())
+      );
+    });
+
     // making the path for the files for different testTypes
-    const basePath = path.join(process.cwd(), './scripts/resources');
+    const basePath = path.join(tempDir, 'resources');
     let target, target_interval;
 
     switch (testType) {
@@ -87,8 +102,8 @@ export async function POST(req) {
     }
 
     // creating the script path for the bash scripts
-    const scriptPath1 = path.join(process.cwd(), './scripts/call_batch.sh');
-    const scriptPath2 = path.join(process.cwd(), './scripts/NeoVar.sh');
+    const scriptPath1 = path.join(os.tmpdir(), '/resources/call_batch');
+    const scriptPath2 = path.join(os.tmpdir(), '/resources/NeoVar');
     const logPath = path.join(process.cwd(), './scripts/logs', `${taskId}.log`);
 
     // let counter;
@@ -139,9 +154,6 @@ export async function POST(req) {
     // command to run the bash script
 
     command = `${scriptPath1} ${scriptPath2} ${inputDir} ${outputDir} ${target} ${target_interval} ${localDir} > ${logPath} 2>&1 &`;
-    // } else {
-    //   return NextResponse.json({ message: 'You have reached the maximum number of samples' }, { status: 400 });
-    // }
 
     // Check if the task is already running
     runningTasks[taskId] = {
