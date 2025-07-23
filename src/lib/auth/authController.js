@@ -63,8 +63,8 @@ export const SignInRoute = async ({ email, password, otp, user }) => {
     return { access_token, refreshToken };
   }
   catch (error) {
-    console.error('Error fetching OTP from database:', error);
-    throw new Error('Error fetching OTP');
+    console.error('Error fetching OTP from database:', error.message);
+    throw new Error(error.message);
   }
 };
 
@@ -83,9 +83,6 @@ export const hashPassword = async (plainPassword) => {
 export const comparePasswords = async (email, inputPassword) => {
   const user = await db.query('SELECT * FROM register_data WHERE email = $1', [email]);
   if (user.rows.length === 0) throw new Error('Invalid email or password');
-
-  console.log('inputPassword:', inputPassword);
-  console.log('hashedPassword:', user.rows[0].password);
 
   const isMatch = await bcrypt.compare(inputPassword, user.rows[0].password);
   if (!isMatch) throw new Error('Enter valid password'); // Corrected syntax
@@ -136,7 +133,14 @@ export const sendOtp = async (email) => {
     from: process.env.NEXT_PUBLIC_EMAIL,
     to: email,
     subject: 'OTP Verification',
-    text: `Your OTP is ${otp}`,
+    html:`
+    <p> Dear User,</p>
+    <p>Your OTP for verification is <strong>${otp}</strong>.</p>
+    <p>Please use this OTP to complete your verification process.</p>
+    <p>Thank you</p>
+    <p>Best regards,</p>
+    <p>Neom Scientific Solutions Pvt. Ltd.</p>
+    `,
   };
 
   try {

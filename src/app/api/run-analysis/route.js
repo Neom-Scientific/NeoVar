@@ -1,202 +1,157 @@
 // 2.3.1
 
-import { exec } from 'child_process';
+import { exec, execSync, spawn, spawnSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { NextResponse } from 'next/server';
-import { generateProjectId, loadRunningTasks } from '@/lib/idGenerator';
+import { generateProjectId } from '@/lib/idGenerator';
 import db from '@/lib/db';
+import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
 
+const WRAPPER_PATH = path.resolve(process.cwd(), 'wrapper/wrapper')
 
-export let runningTasks = await loadRunningTasks();
 
 export async function POST(req) {
   try {
     // Parse the request body
-    const { projectName, testType, outputDirectory, numberOfSamples, excelSheet, inputDir, localDir, email } = await req.json();
+    const response = [];
+    const { projectName, testType, outputDirectory, numberOfSamples, excelSheet, inputDir, localDir, email, sampleIds } = await req.json();
 
-    // initialize the counter
+
+    // Validate sampleIds
+    if (!Array.isArray(sampleIds) || sampleIds.length === 0 || sampleIds.includes(null)) {
+      response.push({
+        message: 'Invalid or missing sampleIds',
+        status: 400
+      })
+      return NextResponse.json(response);
+    }
+
+    // Initialize taskId
     let taskId;
     const getRunningTasks = await db.query('SELECT email from RunningTasks WHERE email = $1', [email]);
     const getCounterTasks = await db.query('SELECT email from CounterTasks WHERE email = $1', [email]);
 
     if (getRunningTasks.rowCount > 0) {
-      return NextResponse.json({ message: 'One task is already in Running' }, { status: 400 });
+      response.push({
+        message: 'One task is already Running',
+        status: 400
+      });
+      return NextResponse.json(response);
     }
 
     if (getCounterTasks.rowCount === 0 && getRunningTasks.rowCount === 0) {
       taskId = generateProjectId();
-    }
-
-    else if (getCounterTasks.rowCount > 0) {
+    } else if (getCounterTasks.rowCount > 0) {
       const length = getCounterTasks.rows.length;
       taskId = generateProjectId(length);
     }
 
-
-    // creating the name for the output folder
+    // Create output directory
     const startTime = Date.now();
     const date = new Date();
     const formattedDate = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const formattedTime = `${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}`;
     const formattedDateTime = `${formattedDate}_${formattedTime}`;
 
-
-    // selecting the input and output directories with the excel sheet
+    // const outputDir = '/media/strive/Strive/NewFolder2/2025-5-10_10-31-56';
     const outputDir = path.join(outputDirectory, formattedDateTime);
-
-
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Read the content of the Excel file
-    const excelFile = path.join(inputDir, excelSheet); // Assuming the Excel file is named 'input.xlsx'
-
+    const excelFile = path.join(inputDir, excelSheet);
     if (!fs.existsSync(excelFile)) {
-      return NextResponse.json({ message: 'Excel file not found' }, { status: 400 });
+      response.push({
+        message: 'Excel file not found',
+        status: 400
+      });
+      return NextResponse.json(response);
     }
 
-
-    const tempDir = path.join(os.tmpdir(), `.resources_${taskId}`);
+    // create a strong password for the zip file generate the 16 characters password
+    const tempDir = path.join('/dev/shm', 'resources');
     fs.mkdirSync(tempDir, { recursive: true });
 
-    const encFile = path.join(process.cwd(), './scripts/resources.tar.enc');
-    const tarFile = path.join(process.cwd(), './scripts/resources.tar');
-    const password = 'v99tHbCgLzll6JL';
-
-    // Decrypt the .tar.enc file
-    await new Promise((resolve, reject) => {
-      exec(
-        `openssl enc -d -aes-256-cbc -in "${encFile}" -out "${tarFile}" -k "${password}"`,
-        (err, stdout, stderr) => (err ? reject(err) : resolve())
-      );
-    });
-
-    // Extract the decrypted .tar file
-    await new Promise((resolve, reject) => {
-      exec(
-        `tar -xvf "${tarFile}" -C "${tempDir}"`,
-        (err, stdout, stderr) => (err ? reject(err) : resolve())
-      );
-    });
-
-    // making the path for the files for different testTypes
-    const basePath = path.join(tempDir, 'resources');
     let target, target_interval;
-
     switch (testType) {
       case 'exome':
-        target = path.join(basePath, 'Exome.hg38.target.vC1.bed');
-        target_interval = path.join(basePath, 'Exome.hg38.target.vC1.interval_list');
+        target = await fetchScriptsFromAWS('resources/Exome.hg38.target.vC1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/Exome.hg38.target.vC1.interval_list', '/dev/shm');
         break;
       case 'clinical':
-        target = path.join(basePath, 'UCE_hg38_v1.1.bed');
-        target_interval = path.join(basePath, 'UCE_hg38_v1.1.interval_list');
+        target = await fetchScriptsFromAWS('resources/UCE_hg38_v1.1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/UCE_hg38_v1.1.interval_list', '/dev/shm');
         break;
       case 'carrier':
-        target = path.join(basePath, 'SCR_hg38_v1.1.bed');
-        target_interval = path.join(basePath, 'SCR_hg38_v1.1.interval_list');
+        target = await fetchScriptsFromAWS('resources/SCR_hg38_v1.1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/SCR_hg38_v1.1.interval_list', '/dev/shm');
         break;
       default:
-        return NextResponse.json({ error: 'Invalid test type' }, { status: 400 });
+        response.push({
+          message: 'Invalid test type',
+          status: 400
+        });
+        return NextResponse.json(response);
     }
+    let scriptPath1, scriptPath2;
+    scriptPath1 = await fetchScriptsFromAWS('resources/call_batch.sh', tempDir);
+    scriptPath2 = await fetchScriptsFromAWS('resources/NeoVar.sh', tempDir);
 
-    // creating the script path for the bash scripts
-    const scriptPath1 = path.join(os.tmpdir(), '/resources/call_batch');
-    const scriptPath2 = path.join(os.tmpdir(), '/resources/NeoVar');
-    const logPath = path.join(process.cwd(), './scripts/logs', `${taskId}.log`);
+    // Insert task into RunningTasks table
+    await db.query(
+      'INSERT INTO RunningTasks (projectid, projectname, inputdir, outputdir, logpath, numberofsamples, testtype, status, done, email, starttime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [taskId, projectName, inputDir, outputDir, null, numberOfSamples, testType, 'running', false, email, startTime]
+    );
 
-    // let counter;
-    // let counter = await db.query('SELECT credits FROM register_data where email = $1', [email]);
-    // counter = counter.rows[0].credits;
-    // console.log('credits:', counter);
-    // let length;
-    // counter -= numberOfSamples;
-    // if (counter <= 0) {
-    //   console.log('counter:', counter);
-    //   return NextResponse.json({ message: `You have ${counter + numberOfSamples} Counters left`, credits: counter }, { status: 400 });
-    // }
-    // else {
-    //   db.query('UPDATE register_data SET credits = $1 WHERE email = $2', [counter, email]);
-    //   console.log('counter:', counter);
-    // }
-    // if (getCounterTasks.rowCount === 0 && getRunningTasks.rowCount === 0) {
-    //   counter = 0;
-    //   counter += numberOfSamples;
-    //   // console.log('counter:', counter);
-    // }
-    // else if (getCounterTasks.rowCount > 0) {
-    //   counter = await db.query('SELECT counter FROM CounterTasks WHERE email = $1', [email]);
-    //   length = getCounterTasks.rowCount;
-    //   // console.log('counter:', counter.rows);
-    //   // console.log('length:', length);
-    //   counter = counter.rows[length - 1].counter;
-    //   // console.log('counter:', counter);
-    //   counter += numberOfSamples;
-    //   // console.log('counter:', counter);
-    // }
-    // if(getRunningTasks.rowCount > 0){
-    //   counter = await db.query('SELECT counter FROM RunningTasks WHERE email = $1', [email]);
-    //   // console.log('counter:', counter);
-    //   counter = counter.rows[0].counter;
-    //   // console.log('counter:', counter);
-    //   counter += numberOfSamples;
-    //   // console.log('counter:', counter);
-    // }
-    // else{
-    //   counter=0;
-    //   counter += numberOfSamples;
-    //   // console.log('counter:', counter);
-    // }
+    // Insert subtasks and execute the first one
+    for (let i = 0; i < sampleIds.length; i++) {
+      const sampleId = sampleIds[i];
+      const logsPath = '/dev/shm/.logs';
+      fs.mkdirSync(logsPath, { recursive: true });
+      const subLogPath = path.join(logsPath, `${taskId}_${sampleId}.log`);
+      const subtaskid = i + 1;
+      const status = i === 0 ? 'running' : 'pending';
 
+      await db.query(
+        'INSERT INTO SubTasks (subtaskid, taskid, sampleid, status, email, logpath,scriptpath1 , scriptpath2, localdir , target, target_interval) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+        [subtaskid, taskId, sampleId, status, email, subLogPath, scriptPath1, scriptPath2, localDir, target, target_interval]
+      );
 
-    let command;
-    // command to run the bash script
-
-    command = `${scriptPath1} ${scriptPath2} ${inputDir} ${outputDir} ${target} ${target_interval} ${localDir} > ${logPath} 2>&1 &`;
-
-    // Check if the task is already running
-    runningTasks[taskId] = {
-      taskId,
-      projectName,
-      inputDir,
-      numberOfSamples,
-      testType,
-      startTime,
-      outputDir,
-      logPath,
-      status: 'running',
-      done: false,
-    };
-    // console.log('runningTasks:', runningTasks[taskId]);
-
-    const runningTasksData = await db.query(
-      'INSERT INTO RunningTasks (projectid , projectname , inputdir , outputdir , logpath ,numberofsamples , testtype, status, done , email, starttime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
-      [
-        taskId,
-        projectName,
+      const args = [
+        path.join(tempDir, 'call_batch.sh'),
+        path.join(tempDir, 'NeoVar.sh'),
         inputDir,
         outputDir,
-        logPath,
-        numberOfSamples,
-        testType,
-        'running',
-        false,
-        email,
-        startTime,
+        target,
+        target_interval,
+        localDir,
+        subLogPath
       ]
-    );
-    // console.log('runningTasksData:', runningTasksData.rows);
-    // making the command so it can run in the background
-    const child = exec(command, { detached: true, stdio: 'ignore' });
-    child.unref();
+      // console.log('args:', args);
+      const tempDir2 = os.tmpdir();
 
+      if (i === 0) {
+        const daemonPath = await fetchScriptsFromAWS('resources/ramfiles', tempDir2);
+        fs.chmodSync(daemonPath, 0o755);
+        spawn(daemonPath, args, { stdio: 'inherit', detached: true }).unref();
+        // const subtaskCommand = `bash ${ramPaths['call_batch.sh']} ${ramPaths['NeoVar.sh']} ${inputDir} ${outputDir} ${ramPaths[targetFileName]} ${ramPaths[targetIntervalFileName]} ${localDir} > ${subLogPath} 2>&1 < /dev/null`;
+        // console.log('subtaskCommand:', subtaskCommand);
+        // const child = spawn(subtaskCommand, { detached: true, stdio: 'ignore', shell: '/bin/bash' });
+        // child.unref();
+      }
+    }
 
-    // sending the response
-    return NextResponse.json(
-      { message: 'Analysis started in background', taskId, outputDir },
-      { status: 200 }
-    );
+    response.push({
+      message: 'Analysis started in background',
+      taskId,
+      outputDir,
+      tempDir,
+      inputDir,
+      localDir,
+      status: 200
+    });
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error in run-analysis/route.js:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

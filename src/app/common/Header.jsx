@@ -18,7 +18,7 @@ const Header = () => {
     const router = useRouter()
 
     const handleLogout = () => {
-        console.log('user', user)
+        // console.log('user', user)
         dispatch(logout())
         router.push('/auth')
         window.location.reload()

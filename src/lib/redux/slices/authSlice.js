@@ -16,7 +16,7 @@ const authSlice = createSlice({
     reducers: {
         setUser: (state, action) => {
             state.user = action.payload;
-            Cookies.set("user", JSON.stringify(action.payload));
+            Cookies.set("user", JSON.stringify(action.payload) , {expires: 7}); // Store user in cookies for 7 days
         },
         logout: (state) => {
             state.user = null;

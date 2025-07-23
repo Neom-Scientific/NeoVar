@@ -2,11 +2,11 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import React, { useEffect, useState } from 'react';
+import React, { use, useEffect, useState } from 'react';
 
 const ProjectAnalysis = () => {
   const [counterData, setCounterData] = useState(null);
-  const [progressData, setPtogressData] = useState({});
+  const [progressData, setProgressData] = useState({});
   const [apiCall, setApiCall] = useState(false);
   const [callCompleted, setCallCompleted] = useState(false);
   const [progressValue, setProgressValue] = useState({});
@@ -15,20 +15,20 @@ const ProjectAnalysis = () => {
   const [isLoading, setIsLoading] = useState(true); // State to control the loader
   const [selectedTask, setSelectedTask] = useState(null); // State to control the selected task for details
 
- let email;
-     const user = Cookies.get('user');
-     if (user) {
-         try {
-             const parsedUser = JSON.parse(user);
-             email = parsedUser.email;
-         }
-         catch (error) {
-             console.error('Error parsing user data:', error);
-         }
-     }
-     else {
-         // console.log('User data:', user);
-     }
+  let email;
+  const user = Cookies.get('user');
+  if (user) {
+    try {
+      const parsedUser = JSON.parse(user);
+      email = parsedUser.email;
+    }
+    catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+  }
+  else {
+    // console.log('User data:', user);
+  }
   useEffect(() => {
     const fetchCounterData = async () => {
       try {
@@ -54,61 +54,84 @@ const ProjectAnalysis = () => {
   }, [apiCall]);
 
   useEffect(() => {
-    const taskIds = JSON.parse(localStorage.getItem('taskId')) || [];
-    if (taskIds.length === 0) return;
+    const taskId = JSON.parse(localStorage.getItem('taskId')) || [];
+    const tempDir = JSON.parse(localStorage.getItem('tempDir')) || [];
+    // if (taskIds.length === 0) return;
 
     let previousStatus = {};
     const intervals = [];
 
-    taskIds.forEach((taskId) => {
-      const interval = setInterval(async () => {
-        try {
-          const res = await axios.post('/api/progress', { taskId, email });
+    // taskIds.forEach((taskId) => {
+    const interval = setInterval(async () => {
+      try {
+        console.log('taskId:', taskId);
+        const res = await axios.post('/api/progress', { taskId, email, tempDir });
 
-          // Update progressData for the specific taskId
-          setPtogressData((prevData) => ({
-            ...prevData,
-            [taskId]: res.data, // Store data for each taskId
-          }));
-
-          setProgressValue((prevProgress) => ({
-            ...prevProgress,
-            [taskId]: res.data.progress, // Store progress for each taskId
-          }));
-          setIsLoading(false); // Stop the loader when data is fetched
-
-          // Handle status changes
-          if (previousStatus[taskId] && previousStatus[taskId] !== res.data.status) {
-            clearInterval(interval); // Stop interval if status changes
-          }
-          previousStatus[taskId] = res.data.status;
-
-          if (res.data.status === 'done') {
-            setCallCompleted(true);
-            localStorage.removeItem('taskId'); // Clear taskId from local storage
-            clearInterval(interval); // Stop interval if task is done
-          }
-          if (res.status === 404) {
-            setCallCompleted(true);
-            clearInterval(interval); // Stop interval if task is not found
-          }
-        } catch (error) {
-          console.error(`Error fetching progress for ${taskId}:`, error);
+        // console.log('res:', res.data);
+        // Update progressData for the specific taskId
+        setProgressData((prevData) => ({
+          ...prevData,
+          [taskId]: res.data, // Store data for each taskId
+        }));
+        if (res.data.error === 'Project not found') {
+          // setNotFound('Project not found');
+          // setShowNotFound(true); // Show the notFound message
+          // setIsLoading(false); // Stop the loader
+          return; // Exit if project is not found
         }
-      }, 10000); // Fetch progress every ten seconds
 
-      intervals.push(interval);
-    });
+        setProgressValue((prevProgress) => ({
+          ...prevProgress,
+          [taskId]: res.data.progress, // Store progress for each taskId
+        }));
+        setIsLoading(false); // Stop the loader when data is fetched
+
+        localStorage.removeItem('tempDir'); // Clear tempDir from local storage
+        // Handle status changes
+        if (previousStatus[taskId] && previousStatus[taskId] !== res.data.status) {
+          clearInterval(interval); // Stop interval if status changes
+        }
+        previousStatus[taskId] = res.data.status;
+
+        if (res.data.status === 'done') {
+          setCallCompleted(true);
+          localStorage.removeItem('taskId'); // Clear taskId from local storage
+          clearInterval(interval); // Stop interval if task is done
+
+          setProgressData(prev=>{
+            const updatedData = { ...prev };
+            delete updatedData[taskId]; // Remove the completed task from progressData
+            return updatedData;
+          });
+          fetchCounterData(); // Fetch counter data again to update the UI
+        }
+        if (res.status === 404) {
+          setCallCompleted(true);
+          clearInterval(interval); // Stop interval if task is not found
+        }
+      } catch (error) {
+        console.error(`Error fetching progress for ${taskId}:`, error);
+      }
+    }, 10000); // Fetch progress every ten seconds
+
+    intervals.push(interval);
+    // });
 
     return () => intervals.forEach(clearInterval); // Cleanup all intervals on unmount
   }, [callCompleted]);
 
+  useEffect(() => {
+    if (progressData.progress === 100) {
+      window.location.reload();
+    }
+  }, [progressData])
+
   // // console.log('progressData:', progressData);
 
-  const handleOpenDialog=(taskData)=>{
+  const handleOpenDialog = (taskData) => {
     setSelectedTask(taskData);
   }
-  const handleCloseDialog=()=>{
+  const handleCloseDialog = () => {
     setSelectedTask(null);
   }
 
@@ -161,53 +184,56 @@ const ProjectAnalysis = () => {
             </TableRow>
           ) : (
             <>
-              {Object.keys(progressData).map((taskId) => (
-                <TableRow key={taskId} className="hover:bg-gray-100">
-                  <TableCell>{taskId}</TableCell>
-                  <TableCell>{progressData[taskId].projectName}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="w-full h-4 border border-gray-300 rounded bg-gray-100">
-                        {/* Inner progress bar */}
-                        <div
-                          className="h-full bg-orange-500 rounded"
-                          style={{ width: `${progressValue[taskId]}%` }}
-                        ></div>
-                      </div>
-                      <div>
-                        {progressData[taskId].progress}%
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {progressData[taskId]?.startTime
-                      ? new Date(progressData[taskId].startTime).toLocaleString()
-                      : 'N/A'}
-                  </TableCell>
-                  <TableCell>{progressData[taskId]?.status || 'N/A'}</TableCell>
-                  <TableCell>{progressData[taskId]?.numberOfSamples || 'N/A'}</TableCell>
-                  {progressData[taskId]?.status === 'done' ? (
+              {Object.keys(progressData)
+                .filter((taskId) => progressData[taskId] && !progressData[taskId].error)
+                .map((taskId) => (
+                  <TableRow key={taskId} className="hover:bg-gray-100">
+                    <TableCell>{taskId}</TableCell>
+                    <TableCell>{progressData[taskId].projectName}</TableCell>
                     <TableCell>
-                      <button 
-                      
-                      className="text-blue-500 hover:underline cursor-pointer">
-                        Download Report
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full h-4 border border-gray-300 rounded bg-gray-100">
+                          {/* Inner progress bar */}
+                          <div
+                            className="h-full bg-orange-500 rounded"
+                            style={{ width: `${progressValue[taskId]}%` }}
+                          ></div>
+                        </div>
+                        <div>
+                          {progressData[taskId].progress}%
+                        </div>
+                      </div>
                     </TableCell>
-                  ) : (
                     <TableCell>
-                      <button 
-                      onClick={() => handleOpenDialog(progressData[taskId])}
-                      className="text-blue-500 hover:underline cursor-pointer">
-                        Details
-                      </button>
-                      <button className="text-red-500 hover:underline ml-2 cursor-pointer">
-                        Stop
-                      </button>
+                      {progressData[taskId]?.startTime
+                        ? new Date(progressData[taskId].startTime).toLocaleString()
+                        : 'N/A'}
+                      {/* {console.log('progressData', progressData)} */}
                     </TableCell>
-                  )}
-                </TableRow>
-              ))}
+                    <TableCell>{progressData[taskId]?.status || 'N/A'}</TableCell>
+                    <TableCell>{progressData[taskId]?.numberOfSamples || 'N/A'}</TableCell>
+                    {progressData[taskId]?.status === 'done' ? (
+                      <TableCell>
+                        <button
+
+                          className="text-blue-500 hover:underline cursor-pointer">
+                          Download Report
+                        </button>
+                      </TableCell>
+                    ) : (
+                      <TableCell className='ps-[30px]'>
+                        <button
+                          onClick={() => handleOpenDialog(progressData[taskId])}
+                          className="text-blue-500 hover:underline cursor-pointer">
+                          Details
+                        </button>
+                        {/* <button className="text-red-500 hover:underline ml-2 cursor-pointer">
+                          Stop
+                        </button> */}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
               {counterData &&
                 Array.isArray(counterData) &&
                 counterData.length > 0 &&
@@ -228,7 +254,7 @@ const ProjectAnalysis = () => {
           )}
         </TableBody>
       </Table>
-      {selectedTask && 
+      {selectedTask &&
         <HandleDialog data={selectedTask} onClose={handleCloseDialog} />
       }
     </div>
@@ -270,7 +296,7 @@ const HandleDialog = ({ data, onClose }) => {
               <span className='text-[13px]'>{data.outputDir}</span>
             </div>
           </div>
-          
+
         </DialogContent>
       </Dialog>
     </div>

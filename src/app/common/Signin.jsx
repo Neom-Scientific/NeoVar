@@ -61,40 +61,39 @@ const Signin = () => {
       return;
     }
 
+    setTimeout(() => {
+      setIsOtpDisabled(false); // Re-enable the button after 1 minute
+    }, 60000); // 1 minute in milliseconds
+    setIsOtpDisabled(true); // Disable the button immediately after sending OTP
     try {
       // Send OTP request
-      const response = await axios.post('/api/auth/send-otp', { email, password });
 
-      // Show success toast
-      toast.success('OTP sent successfully!', {
+      const response = await axios.post('/api/auth/send-otp', { email, password });
+      // console.log('response', response);
+
+      if (response.data[0].status === 200) {
+        toast.success('OTP sent successfully!', {
+          position: "top-right",
+          autoClose: 5000,
+        });
+        setIsOtpDisabled(true); // Disable the button after sending OTP
+      }
+      else if (response.data[0].status === 401) {
+        toast.error(response.data[0].message, {
+          position: "top-right",
+          autoClose: 5000,
+        });
+        setIsOtpDisabled(false); // Re-enable the button if OTP sending fails
+      }
+
+    } catch (error) {
+      console.error('Error:', error);
+      setIsOtpDisabled(false); // Re-enable the button in case of error
+      // Handle unexpected errors
+      toast.error('An error occurred while sending OTP', {
         position: "top-right",
         autoClose: 5000,
       });
-
-      setIsOtpDisabled(true); // Disable the button after sending OTP
-
-      setTimeout(() => {
-        setIsOtpDisabled(false); // Re-enable the button after 1 minute
-      }, 60000); // 1 minute in milliseconds
-      
-    } catch (error) {
-      console.error('Error:', error);
-
-      // Handle specific error responses
-      if (error.response && error.response.status === 401) {
-        toast.error(error.response.data.message, {
-          position: "top-right",
-          autoClose: 5000,
-        });
-      } else {
-        // Handle unexpected errors
-        toast.error('An error occurred while sending OTP', {
-          position: "top-right",
-          autoClose: 5000,
-        });
-      }
-
-      // Prevent error propagation
       return; // Ensure the error does not propagate further
     }
   };
@@ -137,8 +136,8 @@ const Signin = () => {
       });
 
       // Set cookies
-      Cookies.set("access_token", access_token);
-      Cookies.set("refreshToken", refreshToken);
+      Cookies.set("access_token", access_token , { expires: 7 }); // Store access token in cookies for 7 days
+      Cookies.set("refreshToken", refreshToken , { expires: 7 }); // Store access token in cookies for 7 days
 
       // Set user in redux store
       dispatch(setUser(data));
@@ -152,6 +151,13 @@ const Signin = () => {
     }
     catch (error) {
       console.error('Error:', error)
+      setIsOtpDisabled(false); // Re-enable the button in case of error
+      if (error.response && error.response.status === 401) {
+        toast.error(error.response.data.error, {
+          position: "top-right",
+          autoClose: 5000,
+        });
+      }
     }
   }
   useEffect(() => {

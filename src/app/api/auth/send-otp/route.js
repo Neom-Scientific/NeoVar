@@ -3,30 +3,53 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request) {
   try {
+    const response = [];
     const body = await request.json();
-    console.log('body:', body);
+    // console.log('body:', body);
 
     // Compare passwords
     try {
       const passwords = await comparePasswords(body.email, body.password);
       if (!passwords) {
-        return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 });
+        response.push({
+          message: 'Invalid email or password',
+          status: 401
+        })
+        return NextResponse.json(response);
       }
     } catch (error) {
       // Handle specific error from comparePasswords
       if (error.message === 'Enter valid password') {
-        return NextResponse.json({ message: 'Invalid password' }, { status: 401 });
+        response.push({
+          message: 'Enter valid password',
+          status: 401
+        });
       }
-      if (error.message === 'Invalid email or password') {
-        return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 });
+      else if (error.message === 'Invalid email or password') {
+        response.push({
+          message: 'Invalid email or password',
+          status: 401
+        });
+      }
+      else{
+        response.push({
+          message: 'An unexpected error occurred while comparing passwords',
+          status: 500
+        });
       }
       console.error('Unexpected error in comparePasswords:', error);
-      return NextResponse.json({ message: 'An unexpected error occurred' }, { status: 500 });
+     return NextResponse.json(response);
     }
 
     // Generate and send OTP
     const otp = await sendOtp(body.email);
-    return NextResponse.json({ message: 'OTP sent', otp }, { status: 200 });
+    response.push({
+      message: 'OTP sent successfully',
+      otp: otp, // Include OTP in the response for testing purposes
+      status: 200
+    });
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error('Error in send-otp route:', error);
     return NextResponse.json({ error: error.message || 'Failed to send OTP' }, { status: 500 });

@@ -1,10 +1,13 @@
 // v3.0
 
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import fs, { unlinkSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import db from '@/lib/db';
+import { exec, spawn } from 'child_process';
+import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
+
 
 // Ordered steps for progress tracking
 const progressSteps = [
@@ -25,94 +28,158 @@ const progressSteps = [
 export async function POST(req) {
   try {
     const { taskId, email } = await req.json();
-    // // console.log('taskId:', taskId);
+    if(fs.existsSync('/dev/shm/resources')) {
+      fs.rmSync('/dev/shm/resources', { recursive: true, force: true });
+    }
 
-    // Load task from JSON file (persistent)
-    // const allTasks = await loadRunningTasks();
-    // const task = allTasks[taskId];
+    // Fetch the task and its subtasks
     const task = await db.query('SELECT * FROM RunningTasks WHERE projectid = $1', [taskId]);
-    // console.log('task:', task.rows);
-
     if (task.rowCount === 0) {
       return NextResponse.json({ error: 'Project not found' }, { status: 200 });
     }
 
-    const logPath = task.rows[0].logpath;
+    const subtasks = await db.query('SELECT * FROM SubTasks WHERE taskid = $1 ORDER BY subtaskid ASC', [taskId]);
+    if (subtasks.rowCount === 0) {
+      return NextResponse.json({ error: 'No subtasks found for this task' }, { status: 200 });
+    }
+
+    let logPath;
     const startTime = task.rows[0].starttime;
     const resources_path = path.join(os.tmpdir(), `.resources_${taskId}`);
-
-
-    // Read the log file
-    let logContent = '';
-    try {
-      logContent = fs.readFileSync(logPath, 'utf8');
-    } catch {
-      return NextResponse.json({
-        progress: 0,
-        status: 'initializing',
-        eta: 'Calculating...',
-      });
+    for (const subtask of subtasks.rows){
+       logPath = path.join(
+        path.dirname(subtask.logpath),
+        `${subtask.sampleid}.log`
+      );
     }
 
-    // Determine progress step
-    let currentStep = -1;
-    for (let i = progressSteps.length - 1; i >= 0; i--) {
-      if (logContent.includes(progressSteps[i])) {
-        currentStep = i;
-        break;
+
+    // Calculate progress based on subtasks
+    let overallProgress = 0;
+
+    if (subtasks.rowCount > 0) {
+      let completedSteps = 0;
+      let totalSteps = subtasks.rowCount * progressSteps.length;
+
+      for (const subtask of subtasks.rows) {
+        const sampleLogPath = path.join(
+          path.dirname(subtask.logpath),
+          `${subtask.sampleid}.log`
+        );
+        // console.log('first sampleLogPath:', sampleLogPath);
+        let subtaskLogContent = '';
+        
+        try {
+          subtaskLogContent = fs.readFileSync(sampleLogPath, 'utf8');
+        } catch {
+          continue; // If the log file is not found, skip this subtask
+        }
+
+        // Determine the current step for this subtask
+        let subtaskCurrentStep = -1;
+        const logLower = subtaskLogContent.toLowerCase();
+        for (let i = progressSteps.length - 1; i >= 0; i--) {
+          // Case-insensitive and partial match for the last step
+          if (
+            (i === progressSteps.length - 1 && logLower.includes("vcf filtering completed")) ||
+            logLower.includes(progressSteps[i].toLowerCase())
+          ) {
+            subtaskCurrentStep = i;
+            break;
+          }
+        }
+
+        // Calculate the progress for this subtask
+        const subtaskProgress = Math.floor(((subtaskCurrentStep + 1) / progressSteps.length) * 100);
+
+        // Update the progress of the subtask in the database
+        await db.query(
+          'UPDATE SubTasks SET progress = $1 WHERE subtaskid = $2 AND taskid = $3',
+          [subtaskProgress, subtask.subtaskid, taskId]
+        );
+        // console.log(`Subtask ${subtask.subtaskid} progress: ${subtaskProgress}%`); // Log the progress for debugging
+
+        // Add the completed steps for this subtask
+        if (subtaskProgress === 100) {
+          completedSteps += progressSteps.length; // Fully completed subtask contributes all steps
+
+          // Mark the subtask as completed instead of deleting it
+          await db.query(
+            'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3',
+            ['completed', subtask.subtaskid, taskId]
+          );
+          // console.log(`Subtask ${subtask.subtaskid} marked as completed.`);
+        } else {
+          completedSteps += subtaskCurrentStep + 1; // Partially completed subtask contributes its current steps
+        }
       }
+
+      // Calculate overall progress as a percentage
+      overallProgress = Math.floor((completedSteps / totalSteps) * 100);
     }
 
-    const totalSteps = progressSteps.length;
-    const progress = Math.floor(((currentStep + 1) / totalSteps) * 100);
+    // Log the overall progress for debugging
+    // console.log('overallProgress:', overallProgress);
 
-    // If task is completed
-    if (currentStep === totalSteps - 1 && !task.done) {
-      task.done = true;
-      task.progress = 100;
-      task.status = 'done';
+    // Update progress in the database
+    if (task.rows[0].progress == null || task.rows[0].progress !== overallProgress) {
+      await db.query(
+        'UPDATE RunningTasks SET progress = $1, status = $2 WHERE projectid = $3',
+        [overallProgress, 'in progress', taskId]
+      );
+    }
 
-      // Save project details
-      // saveProjectDetails({
-      //   counter: task.counter,
-      //   projectId: task.taskId,
-      //   projectName: task.projectName,
-      //   analysisStatus: 'done',
-      //   creationTime: startTime,
-      //   operation: 'analysis',
-      //   progress: 100,
-      //   numberOfSamples: task.numberOfSamples,
-      //   totalTime: Date.now() - startTime,
-      // });
+    // If all subtasks are completed, delete them and mark the task as done
+    const allCompleted = subtasks.rows.every((subtask) => subtask.status === 'completed');
+    if (allCompleted) {
+      // console.log('All subtasks are completed. Cleaning up...');
+      const logFiles = subtasks.rows.map((subtask) => subtask.logpath);
+      logFiles.forEach((logFile) => {
+        if (fs.existsSync(logFile)) {
+          unlinkSync(logFile); // Delete log files
+        }
+      });
+      const targetFiles = subtasks.rows.map((subtask) => subtask.target);
+      targetFiles.forEach((targetFile) => {
+        if (fs.existsSync(targetFile)) {
+          unlinkSync(targetFile); // Delete target files
+        }
+      });
+      const targetIntervalFiles = subtasks.rows.map((subtask) => subtask.target_interval);
+      targetIntervalFiles.forEach((targetIntervalFile) => {
+        if (fs.existsSync(targetIntervalFile)) {
+          unlinkSync(targetIntervalFile); // Delete target interval files
+        }
+      });
+      await db.query('DELETE FROM SubTasks WHERE taskid = $1', [taskId]); // Delete all subtasks
+      await db.query(
+        'INSERT INTO CounterTasks (projectid, projectname, analysistatus, creationtime, progress, numberofsamples, totaltime, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [
+          task.rows[0].projectid,
+          task.rows[0].projectname,
+          'done',
+          task.rows[0].starttime,
+          100,
+          task.rows[0].numberofsamples,
+          Date.now() - startTime,
+          email
+        ]
+      );
 
       fs.rmSync(resources_path, { recursive: true, force: true });
-      const counterData = await db.query('INSERT INTO CounterTasks (projectid, projectname, analysistatus, creationtime, progress, numberofsamples, totaltime, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [
-        task.rows[0].projectid,
-        task.rows[0].projectname,
-        'done',
-        task.rows[0].starttime,
-        100,
-        task.rows[0].numberofsamples,
-        Date.now() - startTime,
-        email
-      ]);
 
-      // Cleanup temp files
-      if (fs.existsSync(task.inputDir)) {
-        fs.rmSync(task.inputDir, { recursive: true, force: true });
+      if (fs.existsSync(task.rows[0].inputdir)) {
+        fs.rmSync(task.rows[0].inputdir, { recursive: true, force: true });
       }
-      
 
-      // Delete task from disk
-      db.query(
-        'DELETE FROM RunningTasks WHERE projectid = $1',
-        [taskId]
-      );
+      fs.rmSync('/dev/shm/.logs', { recursive: true, force: true });
+
+      await db.query('DELETE FROM RunningTasks WHERE projectid = $1', [taskId]);
 
       return NextResponse.json({
         taskId,
-        projectName: task.projectName,
-        numberOfSamples: task.numberOfSamples,
+        projectName: task.rows[0].projectname,
+        numberOfSamples: task.rows[0].numberofsamples,
         startTime,
         progress: 100,
         status: 'done',
@@ -120,23 +187,47 @@ export async function POST(req) {
       });
     }
 
-    // Update progress in the file if changed
+    // If not all subtasks are completed, start the next subtask
+    const nextSubtask = subtasks.rows.find((s) => s.status === 'pending');
+    if (nextSubtask) {
+      // Check if there is any subtask currently running
+      const runningSubtask = subtasks.rows.find((s) => s.status === 'running');
+      if (runningSubtask) {
+        // console.log(`Subtask ${runningSubtask.subtaskid} is still running. Waiting for it to complete.`);
+      } else {
+        // create a strong password for the zip file generate the 16 characters password
+        const tempDir = path.join('/dev/shm', 'resources');
+        fs.mkdirSync(tempDir, { recursive: true });
+        let scriptPath1, scriptPath2;
+        scriptPath1 = await fetchScriptsFromAWS('resources/call_batch.sh', tempDir);
+        scriptPath2 = await fetchScriptsFromAWS('resources/NeoVar.sh', tempDir);
 
-    if (task.progress == null || task.progress !== progress) {
-      task.progress = progress;
-      task.status = 'in progress';
-      task.done = false;
+        const args = [
+          path.join(tempDir, 'call_batch.sh'),
+          path.join(tempDir, 'NeoVar.sh'),
+          task.rows[0].inputdir,
+          task.rows[0].outputdir,
+          nextSubtask.target,
+          nextSubtask.target_interval,
+          nextSubtask.localdir,
+          nextSubtask.logpath,
+        ]
 
-      // await saveRunningTasks(task);
-      // console.log('progress:', progress);
-      // console.log('status:', task.status);
-      // console.log('task.projectid:', taskId);
-      const progressData = await db.query(
-        'UPDATE RunningTasks SET progress = $1, status = $2 WHERE projectid = $3',
-        [progress, task.status, taskId]
-      );
-      // console.log('progress:', progressData.rows);
+        const daemonPath = 'tmp/ramfiles'
+        spawn(daemonPath, args, { stdio: 'inherit', detached: true }).unref();
+
+        // Update the status of the next subtask to 'running'
+        await db.query(
+          'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3',
+          ['running', nextSubtask.subtaskid, taskId]
+        );
+        if (fs.existsSync(tempDir)) {
+          fs.rmdirSync(tempDir, { recursive: true });
+        }
+        // console.log(`Subtask ${nextSubtask.subtaskid} is now running.`);
+      }
     }
+
 
     // Estimate ETA
     const elapsed = Date.now() - startTime;
@@ -147,7 +238,7 @@ export async function POST(req) {
       projectName: task.rows[0].projectname,
       numberOfSamples: task.rows[0].numberofsamples,
       startTime: parseInt(task.rows[0].starttime),
-      progress,
+      progress: overallProgress,
       status: 'in progress',
       inputDir: task.rows[0].inputdir,
       outputDir: task.rows[0].outputdir,

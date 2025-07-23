@@ -12,7 +12,7 @@ const inter = Inter({
 
 export const metadata = {
   title: "NeoVar",
-  description: "www.neomscientific.com",
+  description: "https://neomscientific.com/",
 };
 
 export default function RootLayout({ children }) {
