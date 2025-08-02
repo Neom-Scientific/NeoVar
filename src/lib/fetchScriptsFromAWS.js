@@ -12,8 +12,8 @@ export async function fetchScriptsFromAWS(fileKey, distDir) {
         const client = new S3Client({
             region: 'ap-south-1',
             credentials: {
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_ACCESS_KEY_SECRET
+                accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_SECRET
             }
         });
 
