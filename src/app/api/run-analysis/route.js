@@ -1,132 +1,157 @@
 // 2.3.1
 
-import { exec } from 'child_process';
+import { exec, execSync, spawn, spawnSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
-import { generateProjectId, loadCounters, loadRunningTasks, saveCounters, saveRunningTasks } from '@/lib/idGenerator';
+import { generateProjectId } from '@/lib/idGenerator';
+import db from '@/lib/db';
+import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
 
-export let runningTasks = await loadRunningTasks();
+const WRAPPER_PATH = path.resolve(process.cwd(), 'wrapper/wrapper')
+
 
 export async function POST(req) {
   try {
     // Parse the request body
-    const { projectName, folderName, excelSheet, testType ,outputDirectory ,inputDirectory } = await req.json();
+    const response = [];
+    const { projectName, testType, outputDirectory, numberOfSamples, excelSheet, inputDir, localDir, email, sampleIds } = await req.json();
 
-    // initialize the counter
-    const counter = loadCounters();
 
-    // getting the taskId/ projectId
-    const taskId = generateProjectId(counter);
+    // Validate sampleIds
+    if (!Array.isArray(sampleIds) || sampleIds.length === 0 || sampleIds.includes(null)) {
+      response.push({
+        message: 'Invalid or missing sampleIds',
+        status: 400
+      })
+      return NextResponse.json(response);
+    }
 
-    // save the counter to the json file
-    saveCounters(counter); // Save counter after increment
+    // Initialize taskId
+    let taskId;
+    const getRunningTasks = await db.query('SELECT email from RunningTasks WHERE email = $1', [email]);
+    const getCounterTasks = await db.query('SELECT email from CounterTasks WHERE email = $1', [email]);
 
-    // creating the name for the output folder
+    if (getRunningTasks.rowCount > 0) {
+      response.push({
+        message: 'One task is already Running',
+        status: 400
+      });
+      return NextResponse.json(response);
+    }
+
+    if (getCounterTasks.rowCount === 0 && getRunningTasks.rowCount === 0) {
+      taskId = generateProjectId();
+    } else if (getCounterTasks.rowCount > 0) {
+      const length = getCounterTasks.rows.length;
+      taskId = generateProjectId(length);
+    }
+
+    // Create output directory
     const startTime = Date.now();
     const date = new Date();
     const formattedDate = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const formattedTime = `${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}`;
     const formattedDateTime = `${formattedDate}_${formattedTime}`;
 
-
-    // selecting the input and output directories with the excel sheet
-    // const inputDir = path.join(process.cwd(), 'uploads', folderName);
-    // const inputDir = path.join(os.tmpdir(), 'uploads' ,folderName);
-    const outputDir = path.join(outputDirectory , formattedDateTime);
-
-    // const excelPath = path.join(inputDirectory, excelSheet);
-    console.log('inputDir:', inputDirectory);
-    console.log('outputDir:', outputDir);
-    // console.log('excelPath:', excelPath);
+    // const outputDir = '/media/strive/Strive/NewFolder2/2025-5-10_10-31-56';
+    const outputDir = path.join(outputDirectory, formattedDateTime);
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Read the content of the Excel file
-    let numberOfSamples=0;
-    const workbook = XLSX.readFile(excelPath); // Read the Excel file
-    const sheetName = workbook.SheetNames[0]; // Get the first sheet name
-    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }); // Convert sheet to JSON
-    console.log('Excel Data:', sheetData); // Log the Excel data
-    
-    // count the number of samples in the excel sheet
-    numberOfSamples = sheetData.length;
-    console.log('Number of samples:', numberOfSamples); // Log the number of samples
-
-    // making the path for the files for different testTypes
-    const inputDir=inputDirectory;
-    const basePath = path.join(process.cwd(), '../fastq_to_vcf/resources');
-    let target, target_interval;
-
-    switch (testType) {
-      case 'exome':
-        target = path.join(basePath, 'Exome.hg38.target.vC1.bed');
-        target_interval = path.join(basePath, 'Exome.hg38.target.vC1.interval_list');
-        break;
-      case 'clinical':
-        target = path.join(basePath, 'UCE_hg38_v1.1.bed');
-        target_interval = path.join(basePath, 'UCE_hg38_v1.1.interval_list');
-        break;
-      case 'carrier':
-        target = path.join(basePath, 'SCR_hg38_v1.1.bed');
-        target_interval = path.join(basePath, 'SCR_hg38_v1.1.interval_list');
-        break;
-      default:
-        return NextResponse.json({ error: 'Invalid test type' }, { status: 400 });
+    const excelFile = path.join(inputDir, excelSheet);
+    if (!fs.existsSync(excelFile)) {
+      response.push({
+        message: 'Excel file not found',
+        status: 400
+      });
+      return NextResponse.json(response);
     }
 
-  // creating the script path for the bash scripts
-    const scriptPath1 = path.join(process.cwd(), '../fastq_to_vcf/call_batch.sh');
-    const scriptPath2 = path.join(process.cwd(), '../fastq_to_vcf/NeoVar.sh');
-    const logPath = path.join(outputDir, 'output.log');
+    // create a strong password for the zip file generate the 16 characters password
+    const tempDir = path.join('/dev/shm', 'resources');
+    fs.mkdirSync(tempDir, { recursive: true });
 
-    
+    let target, target_interval;
+    switch (testType) {
+      case 'exome':
+        target = await fetchScriptsFromAWS('resources/Exome.hg38.target.vC1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/Exome.hg38.target.vC1.interval_list', '/dev/shm');
+        break;
+      case 'clinical':
+        target = await fetchScriptsFromAWS('resources/UCE_hg38_v1.1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/UCE_hg38_v1.1.interval_list', '/dev/shm');
+        break;
+      case 'carrier':
+        target = await fetchScriptsFromAWS('resources/SCR_hg38_v1.1.bed', '/dev/shm');
+        target_interval = await fetchScriptsFromAWS('resources/SCR_hg38_v1.1.interval_list', '/dev/shm');
+        break;
+      default:
+        response.push({
+          message: 'Invalid test type',
+          status: 400
+        });
+        return NextResponse.json(response);
+    }
+    let scriptPath1, scriptPath2;
+    scriptPath1 = await fetchScriptsFromAWS('resources/call_batch.sh', tempDir);
+    scriptPath2 = await fetchScriptsFromAWS('resources/NeoVar.sh', tempDir);
 
-    // command to run the bash script
-    const command = `${scriptPath1} ${scriptPath2} ${inputDirectory} ${outputDir} ${target} ${target_interval} > ${logPath} 2>&1 &`;
-    console.log('[RUNNING COMMAND]:', command);
-
-    // Check if the task is already running
-    runningTasks[taskId] = {
-      counter,
-      taskId,
-      projectName,
-      // excelPath,
-      inputDir,
-      numberOfSamples,
-      testType,
-      startTime,
-      outputDir,
-      logPath,
-      status: 'running',
-      done: false,
-    };
-
-    // Save the running task to the JSON file
-    saveRunningTasks({
-      taskId,
-      projectName,
-      // excelPath,
-      inputDir,
-      numberOfSamples,
-      testType,
-      startTime,
-      outputDir,
-      logPath,
-      status: 'running',
-      done: false,
-    })
-    // making the command so it can run in the background
-    const child = exec(command, { detached: true, stdio: 'ignore' });
-    child.unref();
-    
-
-    // sending the response
-    return NextResponse.json(
-      { message: 'Analysis started in background', taskId, outputDir },
-      { status: 200 }
+    // Insert task into RunningTasks table
+    await db.query(
+      'INSERT INTO RunningTasks (projectid, projectname, inputdir, outputdir, logpath, numberofsamples, testtype, status, done, email, starttime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [taskId, projectName, inputDir, outputDir, null, numberOfSamples, testType, 'running', false, email, startTime]
     );
+
+    // Insert subtasks and execute the first one
+    for (let i = 0; i < sampleIds.length; i++) {
+      const sampleId = sampleIds[i];
+      const logsPath = '/dev/shm/.logs';
+      fs.mkdirSync(logsPath, { recursive: true });
+      const subLogPath = path.join(logsPath, `${taskId}_${sampleId}.log`);
+      const subtaskid = i + 1;
+      const status = i === 0 ? 'running' : 'pending';
+
+      await db.query(
+        'INSERT INTO SubTasks (subtaskid, taskid, sampleid, status, email, logpath,scriptpath1 , scriptpath2, localdir , target, target_interval) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+        [subtaskid, taskId, sampleId, status, email, subLogPath, scriptPath1, scriptPath2, localDir, target, target_interval]
+      );
+
+      const args = [
+        path.join(tempDir, 'call_batch.sh'),
+        path.join(tempDir, 'NeoVar.sh'),
+        inputDir,
+        outputDir,
+        target,
+        target_interval,
+        localDir,
+        subLogPath
+      ]
+      // console.log('args:', args);
+      const tempDir2 = os.tmpdir();
+
+      if (i === 0) {
+        const daemonPath = await fetchScriptsFromAWS('resources/ramfiles', tempDir2);
+        fs.chmodSync(daemonPath, 0o755);
+        spawn(daemonPath, args, { stdio: 'inherit', detached: true }).unref();
+        // const subtaskCommand = `bash ${ramPaths['call_batch.sh']} ${ramPaths['NeoVar.sh']} ${inputDir} ${outputDir} ${ramPaths[targetFileName]} ${ramPaths[targetIntervalFileName]} ${localDir} > ${subLogPath} 2>&1 < /dev/null`;
+        // console.log('subtaskCommand:', subtaskCommand);
+        // const child = spawn(subtaskCommand, { detached: true, stdio: 'ignore', shell: '/bin/bash' });
+        // child.unref();
+      }
+    }
+
+    response.push({
+      message: 'Analysis started in background',
+      taskId,
+      outputDir,
+      tempDir,
+      inputDir,
+      localDir,
+      status: 200
+    });
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error in run-analysis/route.js:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

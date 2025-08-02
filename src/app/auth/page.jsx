@@ -36,7 +36,7 @@ const page = () => {
 
         {/* Sign In / Sign Up Form */}
         <div className="w-full max-w-sm">
-          {SignIn ? <Signin /> : <Signup />}
+          {SignIn ? <Signin /> : <Signup setSignIn={setSignIn} />}
         </div>
 
         {/* Toggle Between Sign In and Sign Up */}

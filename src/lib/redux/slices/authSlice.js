@@ -1,9 +1,9 @@
 import { createSlice } from "@reduxjs/toolkit";
 import Cookies from "js-cookie";
 
-const storedUser=Cookies.get("user")?JSON.parse(Cookies.get("user")):null;
+const storedUser = Cookies.get("user") ? JSON.parse(Cookies.get("user")) : null;
 const initialState = {
-    user:storedUser,
+    user: storedUser,
     accessToken: Cookies.get("accessToken") || null,
     refreshToken: Cookies.get("refreshToken") || null,
     loading: false,
@@ -16,7 +16,7 @@ const authSlice = createSlice({
     reducers: {
         setUser: (state, action) => {
             state.user = action.payload;
-            Cookies.set("user", JSON.stringify(action.payload));
+            Cookies.set("user", JSON.stringify(action.payload) , {expires: 7}); // Store user in cookies for 7 days
         },
         logout: (state) => {
             state.user = null;
@@ -31,5 +31,5 @@ const authSlice = createSlice({
 
     },
 });
-export const { setUser, logout,seeUser } = authSlice.actions;
+export const { setUser, logout, seeUser } = authSlice.actions;
 export default authSlice.reducer;

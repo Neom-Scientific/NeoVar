@@ -2,7 +2,7 @@
 import React from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { set, z } from 'zod'
 
 import { Form, FormField, FormItem, FormLabel, FormControl } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import axios from 'axios'
 import { useDispatch, useSelector } from 'react-redux'
 import { toast, ToastContainer } from 'react-toastify'
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 // Schema with confirm password validation
 const formSchema = z.object({
@@ -17,13 +18,15 @@ const formSchema = z.object({
     password: z.string().min(6),
     confirmPassword: z.string().min(6),
 }).refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
+    message: "Passwords does not match",
     path: ["confirmPassword"],
 })
 
-const Signup = () => {
-    const user=useSelector((state) => state.auth.user);
+const Signup = ({ setSignIn }) => {
+    const user = useSelector((state) => state.auth.user);
     const dispatch = useDispatch();
+    const [passwordVisible, setPasswordVisible] = React.useState(false)
+    const [confirmPasswordVisible, setConfirmPasswordVisible] = React.useState(false)
     const form = useForm({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -34,11 +37,11 @@ const Signup = () => {
     })
 
     const onSubmit = async (data) => {
-        // console.log('Signup data:', data)
-        try{
+        // // console.log('Signup data:', data)
+        try {
             // const response=await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/signup`, data);
-            const response=await axios.post('/api/auth/signup', data);
-            console.log('reponse:', response);
+            const response = await axios.post('/api/auth/signup', data);
+            // console.log('reponse:', response);
             toast.success(response.data.message, {
                 position: "top-right",
                 autoClose: 5000,
@@ -48,8 +51,9 @@ const Signup = () => {
                 draggable: true,
                 progress: undefined,
             });
-            if(response.status ===409){
-                toast.error(response.message, {
+            setSignIn((prev) => !prev)
+            if (response.status === 409) {
+                toast.error(response.data.error, {
                     position: "top-right",
                     autoClose: 5000,
                     hideProgressBar: false,
@@ -61,18 +65,18 @@ const Signup = () => {
             }
         }
         catch (error) {
-            if(error.response && error.response.status === 409) {
+            if (error.response && error.response.status === 409) {
                 toast.error(error.response.data.message, {
                     position: "top-right",
                     autoClose: 5000,
-                    hideProgressBar: false, // This options makes the bar dismissible, and removes the animated progress bar
+                    hideProgressBar: false,
                     closeOnClick: true,
                     pauseOnHover: true,
                     draggable: true,
                     progress: undefined,
                 });
             } else {
-                toast.error('An error occurred during signup', {
+                toast.error('An error occurred during signups', {
                     position: "top-right",
                     autoClose: 5000,
                     hideProgressBar: false,
@@ -82,7 +86,7 @@ const Signup = () => {
                     progress: undefined,
                 });
             }
-            console.log('Error during signup:', error)
+            // console.log('Error during signup:', error);
         }
     }
 
@@ -98,8 +102,11 @@ const Signup = () => {
                             <FormItem>
                                 <FormLabel>Email</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="Email" {...field} />
+                                    <Input className="focus-within:ring-orange-500" placeholder="Email" {...field} />
                                 </FormControl>
+                                {form.formState.errors.email && (
+                                    <p className="text-red-500 text-sm mt-1">{form.formState.errors.email.message}</p>
+                                )}
                             </FormItem>
                         )}
                     />
@@ -110,11 +117,33 @@ const Signup = () => {
                             <FormItem>
                                 <FormLabel>Password</FormLabel>
                                 <FormControl>
-                                    <Input type="password" placeholder="Password" {...field} />
+                                    <div
+                                        className={`flex items-center border rounded-md focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500`}
+                                    >
+                                        <input
+                                            type={passwordVisible ? "text" : "password"}
+                                            className="flex-1 px-3 py-2 rounded-md outline-none focus:ring-0 focus:border-none"
+                                            placeholder="Password"
+                                            {...field}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="px-3 py-2 bg-white border-l border-gray-300 flex items-center justify-center focus:outline-none"
+                                            onClick={() => setPasswordVisible(!passwordVisible)}
+                                        >
+                                            {passwordVisible ? <FaEye /> : <FaEyeSlash />}
+                                        </button>
+                                    </div>
                                 </FormControl>
+                                {form.formState.errors.password && (
+                                    <p className="text-red-500 text-sm mt-1">
+                                        {form.formState.errors.password.message}
+                                    </p>
+                                )}
                             </FormItem>
                         )}
                     />
+
                     <FormField
                         control={form.control}
                         name="confirmPassword"
@@ -122,16 +151,38 @@ const Signup = () => {
                             <FormItem>
                                 <FormLabel>Confirm Password</FormLabel>
                                 <FormControl>
-                                    <Input type="password" placeholder="Confirm Password" {...field} />
+                                    <div
+                                        className={`flex items-center border rounded-md focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500`}
+                                    >
+                                        <input
+                                            type={confirmPasswordVisible ? "text" : "password"}
+                                            className="flex-1 px-3 py-2 rounded-md outline-none focus:ring-0 focus:border-none"
+                                            placeholder="Confirm Password"
+                                            {...field}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="px-3 py-2 bg-white border-l border-gray-300 flex items-center justify-center focus:outline-none"
+                                            onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                                        >
+                                            {confirmPasswordVisible ? <FaEye /> : <FaEyeSlash />}
+                                        </button>
+                                    </div>
                                 </FormControl>
+                                {form.formState.errors.confirmPassword && (
+                                    <p className="text-red-500 text-sm mt-1">
+                                        {form.formState.errors.confirmPassword.message}
+                                    </p>
+                                )}
                             </FormItem>
                         )}
                     />
-                    <Button type="submit" className="w-full mt-4 cursor-pointer">Submit</Button>
-                    <Button type="button" className="w-full mt-2 cursor-pointer" onClick={() => form.reset()}>Reset</Button>
+
+                    <Button type="submit" className="w-full mt-4 cursor-pointer bg-orange-500">Submit</Button>
+                    <Button type="button" className="w-full mt-2 cursor-pointer bg-orange-500" onClick={() => form.reset()}>Reset</Button>
                 </form>
             </Form>
-            <ToastContainer/>
+            <ToastContainer />
         </div>
     )
 }

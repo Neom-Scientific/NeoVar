@@ -1,7 +1,7 @@
 
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { use, useEffect, useState } from 'react'
 import {
     Form,
     FormField,
@@ -26,19 +26,18 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import * as XLSX from 'xlsx'
-import axios from 'axios';
+import axios, { all } from 'axios';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { toast, ToastContainer } from 'react-toastify'
+import Cookies from 'js-cookie'
 
 
 // 1. Validation schema
 const formSchema = z.object({
     projectName: z.string().min(1, { message: "Project name is required" }),
     outputDirectory: z.string().min(1, { message: "Output directory is required" }),
-    inputDirectory: z.string().min(1, { message: "Input directory is required" }),
-    // testType: z.enum(['exome', 'clinical', 'carrier'], {
-    //     required_error: "Test type is required",
-    //     invalid_type_error: "Test type must be one of 'exome', 'clinical', or 'carrier'",
-    // }),
+    localDirectory: z.string().min(1, { message: "Local directory is required" }),
+    // testType: z.string().min(1, { message: "Test type is required" }),
 })
 
 const NewProject = () => {
@@ -54,9 +53,16 @@ const NewProject = () => {
     const [runningTasks, setRunningTasks] = useState(false);
     const [testType, setTestType] = useState('');
     const [showDialog, setShowDialog] = useState(false);
-    const [inputDir, setInputDir] = useState('');
-    const [outputDir, setOutputDir] = useState('');
     const [numberOfSamples, setNumberOfSamples] = useState(0);
+    const [testTypeName, setTestTypeName] = useState('')
+    const [localDirSuggestions, setLocalDirSuggestions] = useState([]);
+    const [outputDirSuggestions, setOutputDirSuggestions] = useState([]);
+    const [filteredLocalDirSuggestions, setFilteredLocalDirSuggestions] = useState([]);
+    const [filteredOutputDirSuggestions, setFilteredOutputDirSuggestions] = useState([]);
+    const [showLocalDirSuggestions, setShowLocalDirSuggestions] = useState(false);
+    const [showOutputDirSuggestions, setShowOutputDirSuggestions] = useState(false);
+
+    const sampleIds = [];
 
     // 2. Setup form
     const form = useForm({
@@ -64,10 +70,25 @@ const NewProject = () => {
         defaultValues: {
             projectName: '',
             outputDirectory: '',
-            inputDirectory: '',
-            // testType: '', // Set default value for testType
+            localDirectory: '',
+            // testType: 'select', // Set default value for testType
         },
     })
+    let email;
+    const user = Cookies.get('user');
+    if (user) {
+        try {
+            const parsedUser = JSON.parse(user);
+            email = parsedUser.email;
+        }
+        catch (error) {
+            console.error('Error parsing user data:', error);
+        }
+    }
+    else {
+        // console.log('User data:', user);
+    }
+
 
 
     // 1. Excel sheet input handler
@@ -81,7 +102,7 @@ const NewProject = () => {
             const sheetName = workbook.SheetNames[0];
             const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
 
-            // console.log('📊 Parsed Sheet Data:', sheetData);
+            // // console.log('📊 Parsed Sheet Data:', sheetData);
             const sample = sheetData.length;
             setNumberOfSamples(sample);
 
@@ -91,177 +112,177 @@ const NewProject = () => {
         reader.readAsArrayBuffer(file);
     }
 
-    // 3. directory input handler
-    // const handleDirectory = async (e) => {
-    //     const files = Array.from(e.target.files);
-    //     // console.log('Selected files:', files);
+    // 2. directory input handler
+    const handleDirectory = async (e) => {
+        const files = Array.from(e.target.files);
+        // // console.log('Selected files:', files);
 
-    //     if (files.length === 0) {
-    //         setSelectedFolder(''); // Reset if no folder is selected
-    //         return;
-    //     }
+        if (files.length === 0) {
+            setSelectedFolder(''); // Reset if no folder is selected
+            return;
+        }
 
-    //     // Extract the folder name from the first file's path
-    //     const folderPath = files[0].webkitRelativePath.split('/')[0];
-    //     setSelectedFolder(folderPath); // Update the selected folder name
+        // Extract the folder name from the first file's path
+        const folderPath = files[0].webkitRelativePath.split('/')[0];
+        setSelectedFolder(folderPath); // Update the selected folder name
 
-    //     const folders = new Set();
+        const folders = new Set();
 
-    //     // Extract folder structure
-    //     files.forEach((file) => {
-    //         const pathParts = file.webkitRelativePath.split('/');
-    //         pathParts.pop(); // Remove file name
-    //         let folderPath = '';
-    //         for (const part of pathParts) {
-    //             folderPath += (folderPath ? '/' : '') + part;
-    //             folders.add(folderPath);
-    //         }
-    //     });
+        // Extract folder structure
+        files.forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            pathParts.pop(); // Remove file name
+            let folderPath = '';
+            for (const part of pathParts) {
+                folderPath += (folderPath ? '/' : '') + part;
+                folders.add(folderPath);
+            }
+        });
 
-    //     // Send folder structure metadata
+        // Send folder structure metadata
 
-    //     for (const file of files) {
-    //         const formData = new FormData(); // Create a fresh FormData for each file
+        for (const file of files) {
+            const formData = new FormData(); // Create a fresh FormData for each file
 
-    //         formData.append('file', file, file.webkitRelativePath);
-    //         formData.append('targetDirectory', form.getValues('inputDirectory'));
-    //         setFiles(prevFiles => [...prevFiles, file]); // Update state with selected files
-    //     }
+            formData.append('file', file, file.webkitRelativePath);
+            formData.append('targetDirectory', form.getValues('inputDirectory'));
+            setFiles(prevFiles => [...prevFiles, file]); // Update state with selected files
+        }
 
-    //     try {
-    //         setIsUploading(true); // Show progress bar
-    //         setProgressValue(0); // Reset progress value
-    //         setShowPopup(true); // Show popup
+        try {
+            setIsUploading(true); // Show progress bar
+            setProgressValue(0); // Reset progress value
+            setShowPopup(true); // Show popup
 
-    //         // Simulate upload progress
-    //         const simulateProgress = () => {
-    //             setProgressValue((prev) => {
-    //                 if (prev >= 100) {
-    //                     clearInterval(interval); // Ensure interval is cleared when progress reaches 100%
-    //                     setIsUploading(false); // Hide progress bar
-    //                     setShowPopup(false); // Close popup
-    //                     return 100;
-    //                 }
-    //                 return prev + 10; // Increment progress by 10%
-    //             });
-    //         };
+            // Simulate upload progress
+            const simulateProgress = () => {
+                setProgressValue((prev) => {
+                    if (prev >= 100) {
+                        clearInterval(interval); // Ensure interval is cleared when progress reaches 100%
+                        setIsUploading(false); // Hide progress bar
+                        setShowPopup(false); // Close popup
+                        return 100;
+                    }
+                    return prev + 10; // Increment progress by 10%
+                });
+            };
 
-    //         const interval = setInterval(simulateProgress, 500); // Update progress every 500ms
-    //     } catch (error) {
-    //         console.error('Upload error:', error);
-    //         setIsUploading(false); // Hide progress bar in case of error
-    //     }
-    // };
+            const interval = setInterval(simulateProgress, 500); // Update progress every 500ms
+        } catch (error) {
+            console.error('Upload error:', error);
+            setIsUploading(false); // Hide progress bar in case of error
+        }
+    };
 
-    // 4. test type handler
+    // 3. test type handler
     const handleSelectTestType = (e) => {
         const selectedValue = e.target.value;
-        setTestType(selectedValue);
+        const selectedName = e.target.options[e.target.selectedIndex].getAttribute('name'); // Get the name attribute
+        setTestTypeName(selectedValue);
+        setTestType(selectedName);
     }
 
-    // 5. Submit handler
-    // const handleSubmit = async (data) => {
-    //     console.log('data:', data);
-    //     for (let i = 0; i < Files.length; i++) {
-    //         const formData = new FormData();
-    //         formData.append('file', Files[i]);
-    //         formData.append('project', selectedFolder); // Folder name based on project
-
-    //         // Append Excel file only for the first file
-    //         if (i === 0 && excelFile) {
-    //             formData.append('file', excelFile);
-    //         }
-
-    //         try {
-    //             setShowDialog(true); // Show dialog
-    //             const res = await fetch('/api/uploads', {
-    //                 method: 'POST',
-    //                 inputDirectory: inputDir,
-    //                 body: formData,
-    //             });
-
-    //             if (!res.ok) {
-    //                 throw new Error('Network response was not ok');
-    //             }
-
-    //             if (!res.body) {
-    //                 console.error('Empty response from the server');
-    //                 return;
-    //             }
-
-
-    //             console.log('upload response:', res);
-    //         } catch (err) {
-    //             console.error('Error uploading:', err);
-    //         }
-    //     }
-
-    //     try {
-    //         // console.log('testtype:', testType);
-    //         const res = await axios.post('/api/run-analysis', {
-    //             projectName: data.projectName,
-    //             inputDirectory: inputDir,
-    //             outputDirectory:outputDir,
-    //             folderName: selectedFolder,
-    //             excelSheet: excelFile.name,
-    //             testType: testType,
-    //         });
-
-    //         if (res.status === 200) {
-    //             console.log('Analysis started successfully:', res.data);
-    //         } else {
-    //             console.error('Error starting analysis:', res.statusText);
-    //         }
-    //         // setTaskId(res.data.taskId); // Store the task ID for progress tracking
-    //         setShowDialog(false); // Hide dialog
-    //         saveTaskIdToLocalStorage(res.data.taskId); // Save task ID to local storage
-    //         setRunningTasks(true); // Set running tasks to true
-    //         // console.log('Task ID:', taskId);
-
-    //     }
-    //     catch (error) {
-    //         console.error('Error:', error);
-    //     }
-
-    //     dispatch(setActiveTab('analysis'));
-    //     setShowAnalysis(true);
-    // }
-
-
+    let inputDir = '';
+    // 4. Submit handler
     const handleSubmit = async (data) => {
-        console.log('data:', data);
-        const folder = data.inputDirectory.split('/').pop();
-        setSelectedFolder(folder);
-        console.log('folder:', folder);
-        try {
-            setShowDialog(true); // Show dialog
-            const response = await window.electronAPI.startPipeline({
-                projectName: data.projectName,
-                folderName: selectedFolder,
-                excelPath: excelFile.name,
-                testType: testType,
-                inputDirectory: data.inputDirectory,
-                outputDirectory: data.outputDirectory,
-                numberOfSamples: numberOfSamples,
-            });
 
-            if (response.success) {
-                console.log('response:', response);
-                setShowDialog(false); // Hide dialog
-                saveTaskIdToLocalStorage(response.taskId); // Save task ID to local storage
-                setRunningTasks(true); // Set running tasks to true
-                setShowAnalysis(true);
-                dispatch(setActiveTab('analysis'));
-            } else {
-                alert(`❌ Pipeline Error: ${response.error}`);
+        let allUploadsSuccessful = true;
+
+        const formData = new FormData();
+
+        if (excelFile) {
+            formData.append('file', excelFile);
+        }
+
+        for (let i = 0; i < Files.length; i++) {
+            formData.append('file', Files[i]);
+        }
+
+        // Add project/folder name
+        formData.append('project', selectedFolder);
+
+        try {
+            formData.append('email', email);
+            setShowDialog(true); // Show dialog
+            const res = await axios.post('/api/uploads', formData);
+            saveToHistory('localDirectoryHistory', data.localDirectory, setLocalDirSuggestions);
+            saveToHistory('outputDirectoryHistory', data.outputDirectory, setOutputDirSuggestions)
+            inputDir = res.data[0].inputDir;
+            for (let i = 0; i < res.data.length; i++) {
+                if (!sampleIds.includes(res.data[i].sampleId)) {
+                    sampleIds.push(res.data[i].sampleId);
+                }
             }
+
+
+            if (res.data[0].status === 400) {
+                allUploadsSuccessful = false;
+                setShowDialog(false);
+                toast.error(res.data[0].message, {
+                    position: "top-right",
+                    autoClose: 5000,
+                });
+            }
+
+        } catch (err) {
+            console.error('Error uploading:', err);
+            allUploadsSuccessful = false;
+            setShowDialog(false); // Hide dialog
+        }
+
+        try {
+            if (allUploadsSuccessful) {
+                toast.success('Analysis Completed');
+                const res = await axios.post('/api/run-analysis', {
+                    projectName: data.projectName,
+                    outputDirectory: data.outputDirectory,
+                    inputDir,
+                    numberOfSamples: numberOfSamples,
+                    localDir: data.localDirectory,
+                    excelSheet: excelFile?.name,
+                    testType: testType,
+                    email: email,
+                    sampleIds: sampleIds,
+                });
+
+                if (res.data[0].status === 200) {
+                    setShowDialog(false); // Hide dialog
+                    localStorage.setItem('taskId', JSON.stringify(res.data[0].taskId)); // Save task ID to local storage
+                    localStorage.setItem('tempDir', JSON.stringify(res.data[0].tempDir)); // Save temp directory to local storage
+                    setRunningTasks(true); // Set running tasks to true
+                    dispatch(setActiveTab('analysis'));
+                    setShowAnalysis(true);
+                }
+                else if (res.data[0].status === 400) {
+                    setShowDialog(false); // Hide dialog
+                    toast.error(res.data[0].message);
+                }
+                else {
+                    setShowDialog(false); // Hide dialog
+                    toast.error('An error occurred while starting the analysis', {
+                        position: "top-right",
+                        autoClose: 5000,
+                        hideProgressBar: false,
+                        closeOnClick: true,
+                        pauseOnHover: true,
+                        draggable: true,
+                        progress: undefined,
+                    });
+                }
+
+            }
+
         }
         catch (error) {
-            console.error('Error:', error);
+            if (error.response && error.response.status === 400) {
+                setShowDialog(false); // Hide dialog
+                toast.error(error.response.data.message);
+            }
         }
+
     }
 
-    // 6. save taskId to local storage
+    // 5. save taskId to local storage
     const saveTaskIdToLocalStorage = (taskId) => {
         const existingTaskIds = JSON.parse(localStorage.getItem('taskId')) || [];
         if (!existingTaskIds.includes(taskId)) {
@@ -271,70 +292,54 @@ const NewProject = () => {
         return taskId;
     }
 
-    // 7. handle output directory
-    // const handleOutputDirectory = (e) => {
-    //    console.log('output directory:', e.target.value);
-    // }
-
-    // const handleInputDirectory = async () => {
-    //     // const handle= await window.showDirectoryPicker();
-    //     // const folderPath = handle.name;
-    //     // console.log('input path:', folderPath);
-    //     // setInputDir(folderPath);
-    //     try {
-    //         // Open the directory picker
-    //         const directoryHandle = await window.showDirectoryPicker();
-    //         console.log('Selected Directory:', directoryHandle.name);
-    //         setInputDir(directoryHandle.name); // Set the input directory name
-
-    //         // Iterate through the directory entries
-    //         for await (const [name, handle] of directoryHandle.entries()) {
-    //             if (handle.kind === 'file') {
-    //                 // If the entry is a file, read its contents
-    //                 const file = await handle.getFile();
-    //                 console.log('File Name:', file.name);
-
-    //                 // // Read the file contents (optional)
-    //                 // const reader = new FileReader();
-    //                 // reader.onload = (event) => {
-    //                 //     console.log('File Contents:', event.target.result);
-    //                 // };
-    //                 // reader.readAsText(file); // You can use readAsArrayBuffer or readAsDataURL for other formats
-    //             } else if (handle.kind === 'directory') {
-    //                 // If the entry is a subdirectory, log its name
-    //                 console.log('Subdirectory:', name);
-    //             }
-    //         }
-    //     } catch (error) {
-    //         console.error('Error reading input directory:', error);
-    //     }
-    // }
-
-    // const handleOutputDirectory= async () => {
-    //     const handle= await window.showDirectoryPicker();
-    //     const folderPath = handle.name;
-    //     console.log('output directory:', folderPath);
-    //     setOutputDir(folderPath);
-    // }
-
-    // const createDirectory = async () => {
-    //     try {
-    //       const handle = await window.showDirectoryPicker();
-    //       const newFileHandle = await handle.getFileHandle('example.txt', { create: true });
-    //       const writable = await newFileHandle.createWritable();
-    //       await writable.write('This is a sample file.');
-    //       await writable.close();
-    //       console.log('File created successfully!');
-    //     } catch (error) {
-    //       console.error('Error creating directory or file:', error);
-    //     }
-    //   };
-
     useEffect(() => {
-        if (!window.electronAPI) {
-            console.error('❌ electronAPI not available!');
-        }
+        const savedLocalDirs = JSON.parse(localStorage.getItem('localDirectoryHistory')) || [];
+        setLocalDirSuggestions(savedLocalDirs);
+
+        const savedOutputDirs = JSON.parse(localStorage.getItem('outputDirectoryHistory')) || [];
+        setOutputDirSuggestions(savedOutputDirs);
     }, []);
+
+    const filterLocalDirSuggestions = (input) => {
+        const val = input || '';
+        if (val.trim() === '') {
+            // Optionally show all saved suggestions if input is empty
+            setFilteredLocalDirSuggestions(localDirSuggestions);
+            setShowLocalDirSuggestions(localDirSuggestions.length > 0);
+            return;
+        }
+        const filtered = localDirSuggestions.filter(dir =>
+            dir.toLowerCase().includes(val.toLowerCase())
+        );
+        setFilteredLocalDirSuggestions(filtered);
+        setShowLocalDirSuggestions(filtered.length > 0);
+    };
+
+
+    const filterOutputDirSuggestions = (input) => {
+        const val = input || '';
+        if (val.trim() === '') {
+            // Optionally show all saved suggestions if input is empty
+            setFilteredOutputDirSuggestions(outputDirSuggestions);
+            setShowOutputDirSuggestions(outputDirSuggestions.length > 0);
+            return;
+        }
+        const filtered = outputDirSuggestions.filter(dir =>
+            dir.toLowerCase().includes(val.toLowerCase())
+        );
+        setFilteredOutputDirSuggestions(filtered);
+        setShowOutputDirSuggestions(filtered.length > 0);
+    };
+
+    const saveToHistory = (key, value, setter) => {
+        if (!value) return;
+        let history = JSON.parse(localStorage.getItem(key)) || [];
+        if (!history.includes(value)) {
+            history = [value, ...history].slice(0, 10); // max 10 entries
+            localStorage.setItem(key, JSON.stringify(history));
+            setter(history);
+        }
+    };
 
     return (
         <div className='mx-5 my-10'>
@@ -352,7 +357,7 @@ const NewProject = () => {
                                         type="text"
                                         placeholder="Project Name"
                                         {...field}
-                                        className="w-[50%] "
+                                        className="w-[50%] focus-within:ring-orange-500 "
                                     />
                                     {form.formState.errors.projectName && (
                                         <p className="mt-2 text-sm text-red-500">
@@ -369,16 +374,27 @@ const NewProject = () => {
                             name="inputDirectory"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className="my-4 text-2xl">Input directory</FormLabel>
+                                    <FormLabel className="my-4 text-2xl">Select Input Directory</FormLabel>
                                     <Input
-                                        type="text"
-                                        placeholder="paste the path to the output directory here"
+                                        type="file"
+                                        name="inputDirectory"
+                                        webkitdirectory="true"
+                                        directory="true"
+                                        multiple
                                         {...field}
-                                        className="w-[50%]"
+                                        className="w-[50%] cursor-pointer focus-within:ring-orange-500"
+                                        placeholder="Input Directory"
+                                        onChange={handleDirectory}
+                                        disabled={isUploading} // Disable input during upload
                                     />
-                                    {form.formState.errors.inputDirectory && (
+                                    {/* {form.formState.errors.inputDirectory && (
                                         <p className="mt-2 text-sm text-red-500">
                                             {form.formState.errors.inputDirectory.message}
+                                        </p>
+                                    )} */}
+                                    {selectedFolder && (
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            Selected Folder: <strong>{selectedFolder}</strong>
                                         </p>
                                     )}
                                 </FormItem>
@@ -405,6 +421,154 @@ const NewProject = () => {
                             </Dialog>
                         )}
 
+                        {/* Output Directory */}
+                        <FormField
+                            control={form.control}
+                            name="outputDirectory"
+                            render={({ field }) => (
+                                <div className='flex justify-start items-center w-[100%] gap-8'>
+                                    <div className='w-[50%]'>
+                                        <FormItem style={{ position: 'relative' }}>
+                                            <FormLabel className="my-4 text-2xl">Output Directory</FormLabel>
+                                            <Input
+                                                type="text"
+                                                placeholder="paste the path to the output directory here"
+                                                {...field}
+                                                className="focus-within:ring-orange-500"
+                                                autoComplete="off"
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    filterOutputDirSuggestions(e.target.value);
+                                                }}
+                                                onFocus={() => {
+                                                    filterOutputDirSuggestions(field.value);
+                                                }}
+                                                onBlur={() => {
+                                                    // Delay hiding to allow click
+                                                    setTimeout(() => setShowOutputDirSuggestions(false), 200);
+                                                }}
+                                            />
+                                            {showOutputDirSuggestions && filteredOutputDirSuggestions.length > 0 && (
+                                                <ul
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        left: 0,
+                                                        right: 0,
+                                                        width: '50%',
+                                                        background: 'black',
+                                                        color: 'white',
+                                                        border: '1px solid #ccc',
+                                                        maxHeight: '150px',
+                                                        overflowY: 'auto',
+                                                        zIndex: 1000,
+                                                        margin: 0,
+                                                        padding: 0,
+                                                        listStyle: 'none',
+                                                    }}
+                                                >
+                                                    {filteredOutputDirSuggestions.map((suggestion, i) => (
+                                                        <li
+                                                            key={i}
+                                                            style={{ padding: '8px', cursor: 'pointer' }}
+                                                            onMouseDown={e => e.preventDefault()} // prevent blur
+                                                            onClick={() => {
+                                                                form.setValue('outputDirectory', suggestion);
+                                                                setShowOutputDirSuggestions(false);
+                                                            }}
+                                                        >
+                                                            {suggestion}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            {form.formState.errors.outputDirectory && (
+                                                <p className="mt-2 text-sm text-red-500">
+                                                    {form.formState.errors.outputDirectory.message}
+                                                </p>
+                                            )}
+                                        </FormItem>
+                                    </div>
+                                </div>
+                            )}
+                        />
+
+                        {/* Local Directory */}
+                        <FormField
+                            control={form.control}
+                            name="localDirectory"
+                            render={({ field }) => (
+                                <div className='flex justify-start items-center w-[100%] gap-8'>
+                                    <div className='w-[50%]'>
+                                        <FormItem style={{ position: 'relative' }}>
+                                            <FormLabel className="my-4 text-2xl">Local Directory</FormLabel>
+                                            <Input
+                                                type="text"
+                                                placeholder="Paste the path to the Local Directory here"
+                                                {...field}
+                                                className="focus-within:ring-orange-500"
+                                                autoComplete="off"
+                                                onFocus={() => {
+                                                    // On focus, filter suggestions with current value
+                                                    filterLocalDirSuggestions(field.value);
+                                                }}
+                                                onBlur={() => {
+                                                    // Delay hiding suggestions so click can register
+                                                    setTimeout(() => setShowLocalDirSuggestions(false), 200);
+                                                }}
+                                            />
+                                            {showLocalDirSuggestions && filteredLocalDirSuggestions.length > 0 && (
+                                                <ul
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        width: '50%',
+                                                        left: 0,
+                                                        right: 0,
+                                                        background: 'black',
+                                                        color: 'white',
+                                                        border: '1px solid #ccc',
+                                                        maxHeight: '150px',
+                                                        overflowY: 'auto',
+                                                        zIndex: 1000,
+                                                        margin: 0,
+                                                        padding: 0,
+                                                        listStyle: 'none',
+                                                    }}
+                                                >
+                                                    {filteredLocalDirSuggestions.map((suggestion, i) => (
+                                                        <li
+                                                            key={i}
+                                                            onMouseDown={e => e.preventDefault()} // prevent blur
+                                                            onClick={() => {
+                                                                form.setValue('localDirectory', suggestion);
+                                                                setShowLocalDirSuggestions(false);
+                                                            }}
+                                                            style={{ padding: '8px', cursor: 'pointer' }}
+                                                        >
+                                                            {suggestion}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </FormItem>
+                                    </div>
+                                    <div className='w-[50%]'>
+                                        <FormLabel className="my-4 text-2xl">Download Local Directory</FormLabel>
+                                        <a
+                                            href="https://drive.google.com/file/d/1HY6fZ2Mnl_0aQ8eZAJ1HOc-NekUJ7aIU/view?usp=sharing"
+                                            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition"
+                                            download
+                                        >
+                                            Download Local Directory
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                        />
+
+
+
                         {/* Excel Sheet Upload */}
                         <FormItem>
                             <div className='flex justify-start items-center w-[100%] gap-8'>
@@ -415,7 +579,7 @@ const NewProject = () => {
                                         accept=".xls,.xlsx"
                                         name="excelSheet"
                                         placeholder="Upload Excel Sheet"
-                                        className="border rounded-md cursor-pointer p-2"
+                                        className="border rounded-md cursor-pointer p-2 focus-within:ring-orange-500"
                                         onChange={handleSheetData}
                                     />
                                     <p className="mt-2 text-sm text-muted-foreground">
@@ -444,13 +608,13 @@ const NewProject = () => {
                                     <FormLabel className="my-4 text-2xl">Select the Type of Test</FormLabel>
                                     <select
                                         {...field}
-                                        className="w-[50%] border rounded-md p-2"
+                                        className="w-[50%] border rounded-md p-2 focus-within:ring-orange-500"
                                         onChange={handleSelectTestType}
                                     >
-                                        <option value="">Select Test Type</option>
-                                        <option value="exome">Exome</option>
-                                        <option value="clinical">Clinical Exome</option>
-                                        <option value="carrier">Carrier Screening</option>
+                                        <option value="select">Select Test Type</option>
+                                        <option name="exome" value="Exome">Exome</option>
+                                        <option name="clinical" value="Clinical Exome">Clinical Exome</option>
+                                        <option name="carrier" value="Carrier Screening">Carrier Screening</option>
                                     </select>
 
                                     {/* {form.formState.errors.testType && (
@@ -465,40 +629,15 @@ const NewProject = () => {
                                     )} */}
                                     {testType && (
                                         <p className="mt-2 text-sm text-muted-foreground">
-                                            Selected Test Type: <strong>{testType}</strong>
+                                            Selected Test Type: <strong>{testTypeName}</strong>
                                         </p>
                                     )}
                                 </FormItem>
 
                             )}
                         />
-                        {/* output directory selection */}
-                        <FormField
-                            control={form.control}
-                            name="outputDirectory"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="my-4 text-2xl">output directory</FormLabel>
-                                    <Input
-                                        type="text"
-                                        placeholder="paste the path to the output directory here"
-                                        {...field}
-                                        className="w-[50%]"
-                                    />
-                                    {form.formState.errors.outputDirectory && (
-                                        <p className="mt-2 text-sm text-red-500">
-                                            {form.formState.errors.outputDirectory.message}
-                                        </p>
-                                    )}
-                                </FormItem>
-                            )}
-                        />
 
 
-
-                        {/* <Button type='button' onClick={handleInputDirectory}> select input directory</Button>
-                        <Button type='button' onClick={handleOutputDirectory}> select output directory</Button> */}
-                        {/* Submit Button */}
                         <Button
                             type="submit"
                             className="mt-5 cursor-pointer bg-orange-500 text-white font-bold hover:bg-white hover:border hover:border-orange-500 hover:text-orange-500 transition-transform duration-200 hover:scale-110"
@@ -506,6 +645,7 @@ const NewProject = () => {
                         >
                             Start Analysis
                         </Button>
+
                         {showDialog && (
                             <Dialog open={showDialog} onOpenChange={setShowDialog}>
                                 <DialogContent className="max-w-sm text-center">
@@ -544,6 +684,7 @@ const NewProject = () => {
                     </TableBody>
                 </Table>
             </div>
+            <ToastContainer />
         </div>
     )
 }

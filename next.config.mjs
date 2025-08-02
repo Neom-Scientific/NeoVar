@@ -5,8 +5,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url)); // Define __dirn
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // output: 'export', // Export static files
   output: 'standalone', // Export static files
+  outputFileTracingRoot: __dirname, // Ensure this points to the project root
+  experimental: {
+    outputFileTracingIncludes: {
+      '/': ['./src/app/globals.css'], // Ensure globals.css is included
+    },
+  },
   webpack(config) {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
@@ -29,33 +34,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-
-
-// /** @type {import('next').NextConfig} */
-// const nextConfig = {
-//   experimental: {
-//     appDir: true,
-//     serverActions: false,
-//   },
-//   images: {
-//     unoptimized: true,
-//     remotePatterns: [
-//       {
-//         protocol: 'https',
-//         hostname: 'images.unsplash.com',
-//         port: '',
-//         pathname: '/**',
-//       },
-//     ],
-//   },
-//   async rewrites() {
-//     return [
-//       {
-//         source: '/api/auth/NeoFastq.py',
-//         destination: '/src/app/api/auth/NeoFastq.py',
-//       },
-//     ];
-//   },
-// };
-
-// export default nextConfig;

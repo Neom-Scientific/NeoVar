@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 
 const Result = () => {
   return (
     <div>
-        You are in the Result tab
+      <h1 className='text-center text-xl text-bold m-3'>
+        This Tab is under development
+      </h1>
     </div>
   )
 }
