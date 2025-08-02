@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "lint": "next lint",
+    "start": "next start -p $PORT",
     "postbuild": "cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public || true"
   },
   "dependencies": {
