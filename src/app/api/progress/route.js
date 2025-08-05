@@ -7,7 +7,7 @@ import os from 'os';
 import db from '@/lib/db';
 import { exec, spawn } from 'child_process';
 import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
-// import { Client } from 'ssh2';
+import { NodeSSH } from 'node-ssh';
 
 // Ordered steps for progress tracking
 const progressSteps = [
@@ -286,53 +286,85 @@ if (process.env.SSH_PRIVATE_KEY) {
 }
 
 
+// async function readRemoteFile(server, remotePath) {
+//   const { Client } = await import('ssh2');
+//   return new Promise((resolve, reject) => {
+//     const conn = new Client();
+//     let data = '';
+//     conn.on('ready', () => {
+//       conn.sftp((err, sftp) => {
+//         if (err) return reject(err);
+//         const stream = sftp.createReadStream(remotePath);
+//         stream.on('data', chunk => data += chunk.toString());
+//         stream.on('end', () => {
+//           conn.end();
+//           resolve(data);
+//         });
+//         stream.on('error', err => {
+//           conn.end();
+//           reject(err);
+//         });
+//       });
+//     }).connect({
+//       host: server.host,
+//       port: server.port,
+//       username: server.user,
+//       privateKey
+//     });
+//   });
+// }
+
 async function readRemoteFile(server, remotePath) {
-  const { Client } = await import('ssh2');
-  return new Promise((resolve, reject) => {
-    const conn = new Client();
-    let data = '';
-    conn.on('ready', () => {
-      conn.sftp((err, sftp) => {
-        if (err) return reject(err);
-        const stream = sftp.createReadStream(remotePath);
-        stream.on('data', chunk => data += chunk.toString());
-        stream.on('end', () => {
-          conn.end();
-          resolve(data);
-        });
-        stream.on('error', err => {
-          conn.end();
-          reject(err);
-        });
-      });
-    }).connect({
-      host: server.host,
-      port: server.port,
-      username: server.user,
-      privateKey
-    });
+  const ssh = new NodeSSH();
+  await ssh.connect({
+    host: server.host,
+    port: server.port,
+    username: server.user,
+    privateKey: privateKey.toString(),
   });
+  const result = await ssh.execCommand(`cat ${remotePath}`);
+  ssh.dispose();
+  if (result.stderr) throw new Error(result.stderr);
+  return result.stdout;
 }
 
+// async function runRemoteAnalysisForSubtask(server, subtask, task) {
+//   const { Client } = await import('ssh2');
+//   const analysisCmd = `bash ${subtask.scriptpath1} ${subtask.scriptpath2} ${task.inputdir} ${task.outputdir} ${subtask.target} ${subtask.target_interval} ${subtask.localdir} > ${subtask.logpath} 2>&1 &`;
+//   return new Promise((resolve, reject) => {
+//     const conn = new Client();
+//     conn.on('ready', () => {
+//       conn.exec(analysisCmd, (err, stream) => {
+//         if (err) {
+//           conn.end();
+//           return reject(err);
+//         }
+//         conn.end();
+//         resolve();
+//       });
+//     }).connect({
+//       host: server.host,
+//       port: server.port,
+//       username: server.user,
+//       privateKey
+//     });
+//   });
+// }
+
 async function runRemoteAnalysisForSubtask(server, subtask, task) {
-  const { Client } = await import('ssh2');
-  const analysisCmd = `bash ${subtask.scriptpath1} ${subtask.scriptpath2} ${task.inputdir} ${task.outputdir} ${subtask.target} ${subtask.target_interval} ${subtask.localdir} > ${subtask.logpath} 2>&1 &`;
-  return new Promise((resolve, reject) => {
-    const conn = new Client();
-    conn.on('ready', () => {
-      conn.exec(analysisCmd, (err, stream) => {
-        if (err) {
-          conn.end();
-          return reject(err);
-        }
-        conn.end();
-        resolve();
-      });
-    }).connect({
-      host: server.host,
-      port: server.port,
-      username: server.user,
-      privateKey
-    });
+  const ssh = new NodeSSH();
+  await ssh.connect({
+    host: server.host,
+    port: server.port,
+    username: server.user,
+    privateKey: privateKey.toString(),
   });
+
+  const analysisCmd = `bash ${subtask.scriptpath1} ${subtask.scriptpath2} ${task.inputdir} ${task.outputdir} ${subtask.target} ${subtask.target_interval} ${subtask.localdir} > ${subtask.logpath} 2>&1 &`;
+
+  const result = await ssh.execCommand(analysisCmd);
+  ssh.dispose();
+
+  if (result.stderr) throw new Error(result.stderr);
+  return result.stdout;
 }
