@@ -16,7 +16,7 @@ const ProjectAnalysis = () => {
   const [selectedTask, setSelectedTask] = useState(null); // State to control the selected task for details
 
   let email;
-  const user = Cookies.get('user');
+  const user = Cookies.get('NeoVar_user');
   if (user) {
     try {
       const parsedUser = JSON.parse(user);
@@ -65,18 +65,16 @@ const ProjectAnalysis = () => {
     const interval = setInterval(async () => {
       try {
         console.log('taskId:', taskId);
+        
         const res = await axios.post('/api/progress', { taskId, email, tempDir });
 
-        // console.log('res:', res.data);
+        console.log('res:', res.data);
         // Update progressData for the specific taskId
         setProgressData((prevData) => ({
           ...prevData,
           [taskId]: res.data, // Store data for each taskId
         }));
         if (res.data.error === 'Project not found') {
-          // setNotFound('Project not found');
-          // setShowNotFound(true); // Show the notFound message
-          // setIsLoading(false); // Stop the loader
           return; // Exit if project is not found
         }
 
