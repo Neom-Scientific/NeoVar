@@ -1,6 +1,6 @@
 import fs, { unlinkSync } from 'fs';
 import path from 'path';
-import { Client } from 'ssh2';
+// import { Client } from 'ssh2';
 import { NextResponse } from 'next/server';
 import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
 import { spawn } from 'child_process';
@@ -82,7 +82,8 @@ async function updateSubtasksProgress(taskId) {
 }
 
 // Helper: Upload a file to the remote server
-function uploadFileToServer(server, localPath, remotePath) {
+async function uploadFileToServer(server, localPath, remotePath) {
+    const { Client } = await import('ssh2');
     return new Promise((resolve, reject) => {
         const conn = new Client();
         conn.on('ready', () => {
@@ -103,7 +104,8 @@ function uploadFileToServer(server, localPath, remotePath) {
     });
 }
 
-function chmodRemoteFile(server, remoteFilePath) {
+async function chmodRemoteFile(server, remoteFilePath) {
+    const { Client } = await import('ssh2');
     return new Promise((resolve, reject) => {
         // console.log(`Starting chmod for ${remoteFilePath} on ${server.host}`);
         const conn = new Client();
@@ -158,7 +160,8 @@ async function uploadFastqFilesToFlask({ username, projectDirPath, files, host }
     console.log('All files uploaded to Flask');
 }
 
-function readRemoteFile(server, remotePath) {
+async function readRemoteFile(server, remotePath) {
+    const { Client } = await import('ssh2');
     return new Promise((resolve, reject) => {
         let content = '';
         const conn = new Client();
@@ -191,6 +194,7 @@ function readRemoteFile(server, remotePath) {
 
 export async function POST(req) {
     try {
+        const { Client } = await import('ssh2');
         const response = [];
         const { projectName, inputDir, testType, email, sampleIds, numberOfSamples } = await req.json();
         const { rows: servers } = await db.query('SELECT * FROM server_systems ORDER BY id');

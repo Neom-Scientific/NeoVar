@@ -7,7 +7,7 @@ import os from 'os';
 import db from '@/lib/db';
 import { exec, spawn } from 'child_process';
 import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
-import { Client } from 'ssh2';
+// import { Client } from 'ssh2';
 
 // Ordered steps for progress tracking
 const progressSteps = [
@@ -286,7 +286,8 @@ if (process.env.SSH_PRIVATE_KEY) {
 }
 
 
-function readRemoteFile(server, remotePath) {
+async function readRemoteFile(server, remotePath) {
+  const { Client } = await import('ssh2');
   return new Promise((resolve, reject) => {
     const conn = new Client();
     let data = '';
@@ -314,6 +315,7 @@ function readRemoteFile(server, remotePath) {
 }
 
 async function runRemoteAnalysisForSubtask(server, subtask, task) {
+  const { Client } = await import('ssh2');
   const analysisCmd = `bash ${subtask.scriptpath1} ${subtask.scriptpath2} ${task.inputdir} ${task.outputdir} ${subtask.target} ${subtask.target_interval} ${subtask.localdir} > ${subtask.logpath} 2>&1 &`;
   return new Promise((resolve, reject) => {
     const conn = new Client();
