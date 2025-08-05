@@ -1,6 +1,5 @@
 import fs, { unlinkSync } from 'fs';
 import path from 'path';
-// import { Client } from 'ssh2';
 import { NextResponse } from 'next/server';
 import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
 import { spawn } from 'child_process';
@@ -8,6 +7,7 @@ import { generateProjectId } from '@/lib/idGenerator';
 import db from '@/lib/db';
 import FormData from 'form-data';
 import axios from 'axios';
+import { NodeSSH } from 'node-ssh';
 
 const progressSteps = [
     "Mapping reads with BWA-MEM, sorting",
@@ -82,61 +82,89 @@ async function updateSubtasksProgress(taskId) {
 }
 
 // Helper: Upload a file to the remote server
+// async function uploadFileToServer(server, localPath, remotePath) {
+//     const { Client } = await import('ssh2');
+//     return new Promise((resolve, reject) => {
+//         const conn = new Client();
+//         conn.on('ready', () => {
+//             conn.sftp((err, sftp) => {
+//                 if (err) return reject(err);
+//                 sftp.fastPut(localPath, remotePath, (err) => {
+//                     conn.end();
+//                     if (err) return reject(err);
+//                     resolve();
+//                 });
+//             });
+//         }).connect({
+//             host: server.host,
+//             port: server.port,
+//             username: server.user_name,
+//             privateKey
+//         });
+//     });
+// }
+
 async function uploadFileToServer(server, localPath, remotePath) {
-    const { Client } = await import('ssh2');
-    return new Promise((resolve, reject) => {
-        const conn = new Client();
-        conn.on('ready', () => {
-            conn.sftp((err, sftp) => {
-                if (err) return reject(err);
-                sftp.fastPut(localPath, remotePath, (err) => {
-                    conn.end();
-                    if (err) return reject(err);
-                    resolve();
-                });
-            });
-        }).connect({
-            host: server.host,
-            port: server.port,
-            username: server.user_name,
-            privateKey
-        });
+    const ssh = new NodeSSH();
+    await ssh.connect({
+        host: server.host,
+        port: server.port,
+        username: server.user_name,
+        privateKey: privateKey.toString(),
     });
+    await ssh.putFile(localPath, remotePath);
+    ssh.dispose();
 }
 
+// async function chmodRemoteFile(server, remoteFilePath) {
+//     const { Client } = await import('ssh2');
+//     return new Promise((resolve, reject) => {
+//         // console.log(`Starting chmod for ${remoteFilePath} on ${server.host}`);
+//         const conn = new Client();
+//         conn.on('ready', () => {
+//             conn.exec(`chmod +x ${remoteFilePath}`, (err, stream) => {
+//                 if (err) {
+//                     conn.end();
+//                     return reject(err);
+//                 }
+//                 stream.on('close', (code, signal) => {
+//                     // console.log(`chmod finished for ${remoteFilePath} with code ${code}`);
+//                     conn.end();
+//                     resolve();
+//                 });
+//                 stream.on('data', (data) => {
+//                     console.log('STDOUT:', data.toString());
+//                 });
+//                 stream.stderr.on('data', (data) => {
+//                     console.error('STDERR:', data.toString());
+//                 });
+//             });
+//         }).on('error', (err) => {
+//             console.error('SSH error:', err);
+//             reject(err);
+//         }).connect({
+//             host: server.host,
+//             port: server.port,
+//             username: server.user_name,
+//             privateKey
+//         });
+//     });
+// }
+
 async function chmodRemoteFile(server, remoteFilePath) {
-    const { Client } = await import('ssh2');
-    return new Promise((resolve, reject) => {
-        // console.log(`Starting chmod for ${remoteFilePath} on ${server.host}`);
-        const conn = new Client();
-        conn.on('ready', () => {
-            conn.exec(`chmod +x ${remoteFilePath}`, (err, stream) => {
-                if (err) {
-                    conn.end();
-                    return reject(err);
-                }
-                stream.on('close', (code, signal) => {
-                    // console.log(`chmod finished for ${remoteFilePath} with code ${code}`);
-                    conn.end();
-                    resolve();
-                });
-                stream.on('data', (data) => {
-                    console.log('STDOUT:', data.toString());
-                });
-                stream.stderr.on('data', (data) => {
-                    console.error('STDERR:', data.toString());
-                });
-            });
-        }).on('error', (err) => {
-            console.error('SSH error:', err);
-            reject(err);
-        }).connect({
-            host: server.host,
-            port: server.port,
-            username: server.user_name,
-            privateKey
-        });
+    const ssh = new NodeSSH();
+    await ssh.connect({
+        host: server.host,
+        port: server.port,
+        username: server.user_name,
+        privateKey: privateKey.toString(),
     });
+    const result = await ssh.execCommand(`chmod +x ${remoteFilePath}`);
+    ssh.dispose();
+    if (result.stderr) {
+        console.error('chmod error:', result.stderr);
+        throw new Error(result.stderr);
+    }
 }
 
 
@@ -160,41 +188,58 @@ async function uploadFastqFilesToFlask({ username, projectDirPath, files, host }
     console.log('All files uploaded to Flask');
 }
 
+// async function readRemoteFile(server, remotePath) {
+//     const { Client } = await import('ssh2');
+//     return new Promise((resolve, reject) => {
+//         let content = '';
+//         const conn = new Client();
+//         conn.on('ready', () => {
+//             conn.exec(`cat ${remotePath}`, (err, stream) => {
+//                 if (err) {
+//                     conn.end();
+//                     return reject(err);
+//                 }
+//                 stream.on('data', (data) => {
+//                     content += data.toString();
+//                 });
+//                 stream.on('close', () => {
+//                     conn.end();
+//                     resolve(content);
+//                 });
+//                 stream.stderr.on('data', (data) => {
+//                     console.error('STDERR:', data.toString());
+//                 });
+//             });
+//         }).connect({
+//             host: server.host,
+//             port: server.port,
+//             username: server.user_name,
+//             privateKey
+//         });
+//     });
+// }
+
 async function readRemoteFile(server, remotePath) {
-    const { Client } = await import('ssh2');
-    return new Promise((resolve, reject) => {
-        let content = '';
-        const conn = new Client();
-        conn.on('ready', () => {
-            conn.exec(`cat ${remotePath}`, (err, stream) => {
-                if (err) {
-                    conn.end();
-                    return reject(err);
-                }
-                stream.on('data', (data) => {
-                    content += data.toString();
-                });
-                stream.on('close', () => {
-                    conn.end();
-                    resolve(content);
-                });
-                stream.stderr.on('data', (data) => {
-                    console.error('STDERR:', data.toString());
-                });
-            });
-        }).connect({
-            host: server.host,
-            port: server.port,
-            username: server.user_name,
-            privateKey
-        });
+    const ssh = new NodeSSH();
+    await ssh.connect({
+        host: server.host,
+        port: server.port,
+        username: server.user_name,
+        privateKey: privateKey.toString(),
     });
+    const result = await ssh.execCommand(`cat ${remotePath}`);
+    ssh.dispose();
+    if (result.stderr) {
+        console.error('STDERR:', result.stderr);
+        throw new Error(result.stderr);
+    }
+    return result.stdout;
 }
 
 
 export async function POST(req) {
     try {
-        const { Client } = await import('ssh2');
+        const ssh = new NodeSSH();
         const response = [];
         const { projectName, inputDir, testType, email, sampleIds, numberOfSamples } = await req.json();
         const { rows: servers } = await db.query('SELECT * FROM server_systems ORDER BY id');
@@ -251,38 +296,51 @@ export async function POST(req) {
         // 1. Fetch scripts/targets from AWS to local temp
         const tempDir = '/tmp/servermode';
         fs.mkdirSync(tempDir, { recursive: true });
-        await new Promise((resolve, reject) => {
-            const conn = new Client();
-            conn.on('ready', () => {
-                console.log('SSH connection ready');
-                conn.exec(`mkdir -p ${remoteDir} ${outputDir} ${logPath} ${remoteInputDir}`, (err, stream) => {
-                    if (err) {
-                        console.error('conn.exec error:', err);
-                        conn.end();
-                        return reject(err);
-                    }
-                    stream.on('close', (code, signal) => {
-                        console.log('mkdir command closed', code, signal);
-                        conn.end();
-                        resolve();
-                    });
-                    stream.on('data', (data) => {
-                        console.log('STDOUT:', data.toString());
-                    });
-                    stream.stderr.on('data', (data) => {
-                        console.error('STDERR:', data.toString());
-                    });
-                });
-            }).on('error', (err) => {
-                console.error('SSH connection error:', err);
-                reject(err);
-            }).connect({
-                host: server.host,
-                port: server.port,
-                username: server.user_name,
-                privateKey
-            });
+        // await new Promise((resolve, reject) => {
+        //     const conn = new Client();
+        //     conn.on('ready', () => {
+        //         console.log('SSH connection ready');
+        //         conn.exec(`mkdir -p ${remoteDir} ${outputDir} ${logPath} ${remoteInputDir}`, (err, stream) => {
+        //             if (err) {
+        //                 console.error('conn.exec error:', err);
+        //                 conn.end();
+        //                 return reject(err);
+        //             }
+        //             stream.on('close', (code, signal) => {
+        //                 console.log('mkdir command closed', code, signal);
+        //                 conn.end();
+        //                 resolve();
+        //             });
+        //             stream.on('data', (data) => {
+        //                 console.log('STDOUT:', data.toString());
+        //             });
+        //             stream.stderr.on('data', (data) => {
+        //                 console.error('STDERR:', data.toString());
+        //             });
+        //         });
+        //     }).on('error', (err) => {
+        //         console.error('SSH connection error:', err);
+        //         reject(err);
+        //     }).connect({
+        //         host: server.host,
+        //         port: server.port,
+        //         username: server.user_name,
+        //         privateKey
+        //     });
+        // });
+
+        await ssh.connect({
+            host: server.host,
+            port: server.port,
+            username: server.user_name,
+            privateKey: privateKey.toString(),
         });
+        const mkdirCmd = `mkdir -p ${remoteDir} ${outputDir} ${logPath} ${remoteInputDir}`;
+        const mkdirResult = await ssh.execCommand(mkdirCmd);
+        if (mkdirResult.stderr) {
+            console.error('mkdir error:', mkdirResult.stderr);
+            throw new Error(mkdirResult.stderr);
+        }
         console.log('mkdir created')
 
         console.log('uploading files to Flask');
@@ -387,24 +445,31 @@ export async function POST(req) {
             const firstSubLogPath = path.join(`/dev/shm/${projectName}/logs`, `${taskId}_${firstSampleId}.log`);
             const analysisCmd = `bash ${path.join(remoteDir, 'call_batch.sh')} ${path.join(remoteDir, 'NeoVar.sh')} ${remoteInputDir} ${outputDir} ${remoteDir}/target.bed ${remoteDir}/interval_file.interval_list ${server.localdir} > ${firstSubLogPath} 2>&1 &`;
 
-            await new Promise((resolve, reject) => {
-                const conn = new Client();
-                conn.on('ready', () => {
-                    conn.exec(analysisCmd, (err, stream) => {
-                        if (err) {
-                            conn.end();
-                            return reject(err);
-                        }
-                        conn.end();
-                        resolve();
-                    });
-                }).connect({
-                    host: server.host,
-                    port: server.port,
-                    username: server.user_name,
-                    privateKey
-                });
-            });
+            // await new Promise((resolve, reject) => {
+            //     const conn = new Client();
+            //     conn.on('ready', () => {
+            //         conn.exec(analysisCmd, (err, stream) => {
+            //             if (err) {
+            //                 conn.end();
+            //                 return reject(err);
+            //             }
+            //             conn.end();
+            //             resolve();
+            //         });
+            //     }).connect({
+            //         host: server.host,
+            //         port: server.port,
+            //         username: server.user_name,
+            //         privateKey
+            //     });
+            // });
+
+            const analysisResult = await ssh.execCommand(analysisCmd);
+            if (analysisResult.stderr) {
+                console.error('Analysis command error:', analysisResult.stderr);
+                throw new Error(analysisResult.stderr);
+            }
+            ssh.dispose();
 
             // After starting the analysis process, call:
             await updateSubtasksProgress(taskId);
