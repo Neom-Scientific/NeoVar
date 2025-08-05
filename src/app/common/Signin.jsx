@@ -23,6 +23,8 @@ const formSchema = z.object({
     .string()
     .regex(/^\d+$/, 'OTP must be a number')
     .length(6, { message: "OTP must be 6 digits" }),
+  // mode: z.string().min(1, { message: "Mode is required" }),
+
 })
 
 const Signin = () => {
@@ -36,6 +38,7 @@ const Signin = () => {
     defaultValues: {
       email: '',
       password: '',
+      // mode: '',
       otp: '',
     },
   })
@@ -44,6 +47,7 @@ const Signin = () => {
     e.preventDefault();
     const email = form.getValues("email");
     const password = form.getValues("password");
+
 
     if (!email) {
       toast.error('Please enter your email address.', {
@@ -99,7 +103,7 @@ const Signin = () => {
   };
 
   const onSubmit = async (data) => {
-    // console.log('Form Submitted:', data)
+    console.log('Form Submitted:', data)
     const otp = form.getValues("otp");
     if (!otp) {
       toast.error('Please enter your OTP.', {
@@ -119,7 +123,7 @@ const Signin = () => {
       // console.log("login_data", response);
 
       // Check if the response contains token and refreshToken
-      const { access_token, refreshToken } = response.data;
+      const { access_token, refreshToken, mode } = response.data;
       if (!access_token || !refreshToken) {
         throw new Error("Invalid response from server");
       }
@@ -135,9 +139,11 @@ const Signin = () => {
         progress: undefined,
       });
 
+      data = { ...data, mode }
+
       // Set cookies
-      Cookies.set("access_token", access_token , { expires: 7 }); // Store access token in cookies for 7 days
-      Cookies.set("refreshToken", refreshToken , { expires: 7 }); // Store access token in cookies for 7 days
+      Cookies.set("access_token", access_token, { expires: 7 }); // Store access token in cookies for 7 days
+      Cookies.set("refreshToken", refreshToken, { expires: 7 }); // Store access token in cookies for 7 days
 
       // Set user in redux store
       dispatch(setUser(data));
@@ -217,6 +223,26 @@ const Signin = () => {
               </FormItem>
             )}
           />
+
+          {/* <FormField
+            control={form.control}
+            name='mode'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Mode</FormLabel>
+                <FormControl>
+                  <select
+                    {...field}
+                    className="w-full px-3 py-2 border-2 bg-inherit rounded-md focus-within:ring-orange-500"
+                  >
+                    <option value="">Select Mode</option>
+                    <option value="server_mode">Server Mode</option>
+                    <option value="local_mode">Local Mode</option>
+                  </select>
+                </FormControl>
+              </FormItem>
+            )}
+          /> */}
 
 
           <FormField

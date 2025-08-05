@@ -20,6 +20,7 @@ const formSchema = z.object({
 }).refine((data) => data.password === data.confirmPassword, {
     message: "Passwords does not match",
     path: ["confirmPassword"],
+    mode: z.string().min(1, { message: "Mode is required" }),
 })
 
 const Signup = ({ setSignIn }) => {
@@ -32,7 +33,8 @@ const Signup = ({ setSignIn }) => {
         defaultValues: {
             email: '',
             password: '',
-            confirmPassword: ''
+            confirmPassword: '',
+            mode: ''
         }
     })
 
@@ -174,6 +176,26 @@ const Signup = ({ setSignIn }) => {
                                         {form.formState.errors.confirmPassword.message}
                                     </p>
                                 )}
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name='mode'
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Mode</FormLabel>
+                                <FormControl>
+                                    <select
+                                        {...field}
+                                        className="w-full px-3 py-2 border-2 bg-inherit rounded-md focus-within:ring-orange-500"
+                                    >
+                                        <option value="">Select Mode</option>
+                                        <option value="server_mode">Server Mode</option>
+                                        {/* <option value="local_mode">Local Mode</option> */}
+                                    </select>
+                                </FormControl>
                             </FormItem>
                         )}
                     />

@@ -6,10 +6,9 @@ import { NextResponse } from 'next/server';
 export async function POST(request) {
   try {
     const body = await request.json();
-
     const user = await comparePasswords(body.email, body.password);
-    const { access_token, refreshToken } = await SignInRoute({ ...body, user });
-    const response = NextResponse.json({ access_token, refreshToken }, { status: 200 });
+    const { access_token, refreshToken ,mode} = await SignInRoute({ ...body, user });
+    const response = NextResponse.json({ access_token, refreshToken, mode }, { status: 200 });
     response.headers.set('Set-Cookie', serialize('access_token', access_token, {
       httpOnly: true,
       path: '/',

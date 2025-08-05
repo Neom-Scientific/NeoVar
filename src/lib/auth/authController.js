@@ -11,7 +11,7 @@ const refreshTokenSecret = process.env.NEXT_PUBLIC_REFRESH_TOKEN_SECRET;
 
 // signup route
 export const SignUpRoute = async (body) => {
-  const { email, password } = body;
+  const { email, password, mode } = body;
 
   try {
     // Check if email already exists
@@ -24,8 +24,8 @@ export const SignUpRoute = async (body) => {
     // Insert user
     const credits = 10;
     const result = await db.query(
-      'INSERT INTO register_data (email, password, credits) VALUES ($1, $2, $3) RETURNING *',
-      [email, password, credits]
+      'INSERT INTO register_data (email, password, credits, mode) VALUES ($1, $2, $3,$4) RETURNING *',
+      [email, password, credits, mode]
     );
 
     return {
@@ -43,24 +43,26 @@ export const SignInRoute = async ({ email, password, otp, user }) => {
   const otpRow = await db.query('SELECT * FROM otp_data WHERE email = $1', [email]);
   const generatedOtp = otpRow.rows[0]?.otp;
 
-  try{
+  try {
     const registerData = await db.query('SELECT * FROM register_data WHERE email = $1', [email]);
     if (registerData.rows.length === 0) throw new Error('Invalid email or password');
-  
+
     if (!generatedOtp || generatedOtp !== otp) {
       await db.query('DELETE FROM otp_data WHERE email = $1', [email]);
       throw new Error('Invalid OTP');
     }
-  
+
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-  
+
     const access_token = generateToken(user);
     const refreshToken = generateRefreshToken(user);
-  
+
+    console.log('mode:', registerData.rows[0].mode);
+
     await db.query('DELETE FROM otp_data WHERE email = $1', [email]);
-    await db.query('INSERT INTO login_data (email, password) VALUES ($1, $2)', [email, hashedPassword]);
-  
-    return { access_token, refreshToken };
+    await db.query('INSERT INTO login_data (email, password , mode ) VALUES ($1, $2 , $3)', [email, hashedPassword, registerData.rows[0].mode]);
+
+    return { access_token, refreshToken ,mode:registerData.rows[0].mode};
   }
   catch (error) {
     console.error('Error fetching OTP from database:', error.message);
@@ -133,7 +135,7 @@ export const sendOtp = async (email) => {
     from: process.env.NEXT_PUBLIC_EMAIL,
     to: email,
     subject: 'OTP Verification',
-    html:`
+    html: `
     <p> Dear User,</p>
     <p>Your OTP for verification is <strong>${otp}</strong>.</p>
     <p>Please use this OTP to complete your verification process.</p>

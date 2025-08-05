@@ -94,13 +94,13 @@ export async function POST(request) {
             file.originalFilename.toLowerCase().endsWith('.fq.gz')
           );
 
-          if (numberofsamples !== fastqFiles.length) {
-            result.push({
-              message: `Number of samples in Excel (${numberofsamples}) does not match number of FASTQ files (${fastqFiles.length})`,
-              status: 400,
-            });
-            return NextResponse.json(result);
-          }
+          // if (numberofsamples !== fastqFiles.length) {
+          //   result.push({
+          //     message: `Number of samples in Excel (${numberofsamples}) does not match number of FASTQ files (${fastqFiles.length})`,
+          //     status: 400,
+          //   });
+          //   return NextResponse.json(result);
+          // }
           const credits = await db.query('SELECT credits from register_data where email = $1', [email]);
           const counter = credits.rows[0].credits;
           if (counter < numberofsamples) {

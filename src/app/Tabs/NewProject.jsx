@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { set, z } from 'zod'
+import { number, set, z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import ProjectAnalysis from './ProjectAnalysis'
@@ -30,15 +30,27 @@ import axios, { all } from 'axios';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { toast, ToastContainer } from 'react-toastify'
 import Cookies from 'js-cookie'
+import { get } from 'http'
 
 
 // 1. Validation schema
-const formSchema = z.object({
+// const formSchema = z.object({
+//     projectName: z.string().min(1, { message: "Project name is required" }),
+//     outputDirectory: z.string().min(1, { message: "Output directory is required" }),
+//     localDirectory: z.string().min(1, { message: "Local directory is required" }),
+//     // testType: z.string().min(1, { message: "Test type is required" }),
+// })
+
+const getFormSchema = (mode) => z.object({
     projectName: z.string().min(1, { message: "Project name is required" }),
-    outputDirectory: z.string().min(1, { message: "Output directory is required" }),
-    localDirectory: z.string().min(1, { message: "Local directory is required" }),
+    outputDirectory: mode !== 'server_mode'
+        ? z.string().min(1, { message: "Output directory is required" })
+        : z.string().optional(),
+    localDirectory: mode !== 'server_mode'
+        ? z.string().min(1, { message: "Local directory is required" })
+        : z.string().optional(),
     // testType: z.string().min(1, { message: "Test type is required" }),
-})
+});
 
 const NewProject = () => {
     const [showAnalysis, setShowAnalysis] = useState(false)
@@ -65,21 +77,14 @@ const NewProject = () => {
     const sampleIds = [];
 
     // 2. Setup form
-    const form = useForm({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            projectName: '',
-            outputDirectory: '',
-            localDirectory: '',
-            // testType: 'select', // Set default value for testType
-        },
-    })
-    let email;
-    const user = Cookies.get('user');
+
+    let email, mode;
+    const user = Cookies.get('NeoVar_user');
     if (user) {
         try {
             const parsedUser = JSON.parse(user);
             email = parsedUser.email;
+            mode = parsedUser.mode;
         }
         catch (error) {
             console.error('Error parsing user data:', error);
@@ -88,6 +93,16 @@ const NewProject = () => {
     else {
         // console.log('User data:', user);
     }
+
+    const form = useForm({
+        resolver: zodResolver(getFormSchema(mode)),
+        defaultValues: {
+            projectName: '',
+            outputDirectory: '',
+            localDirectory: '',
+            // testType: 'select', // Set default value for testType
+        },
+    })
 
 
 
@@ -233,29 +248,46 @@ const NewProject = () => {
         try {
             if (allUploadsSuccessful) {
                 toast.success('Analysis Completed');
-                const res = await axios.post('/api/run-analysis', {
-                    projectName: data.projectName,
-                    outputDirectory: data.outputDirectory,
-                    inputDir,
-                    numberOfSamples: numberOfSamples,
-                    localDir: data.localDirectory,
-                    excelSheet: excelFile?.name,
-                    testType: testType,
-                    email: email,
-                    sampleIds: sampleIds,
-                });
+                let analysisRes;
+                if (mode === 'server_mode') {
+                    analysisRes = await axios.post('/api/server-mode', {
+                        projectName: data.projectName,
+                        inputDir,
+                        testType: testType,
+                        email: email,
+                        sampleIds: sampleIds,
+                        numberOfSamples: numberOfSamples,
+                    })
+                }
+                else {
+                    analysisRes = await axios.post('/api/run-analysis', {
+                        projectName: data.projectName,
+                        outputDirectory: data.outputDirectory,
+                        inputDir,
+                        numberOfSamples: numberOfSamples,
+                        localDir: data.localDirectory,
+                        excelSheet: excelFile?.name,
+                        testType: testType,
+                        email: email,
+                        sampleIds: sampleIds,
+                    });
+                }
 
-                if (res.data[0].status === 200) {
+                console.log('analysisRes:', analysisRes.data);
+
+                if (analysisRes.data[0].status === 200) {
                     setShowDialog(false); // Hide dialog
-                    localStorage.setItem('taskId', JSON.stringify(res.data[0].taskId)); // Save task ID to local storage
-                    localStorage.setItem('tempDir', JSON.stringify(res.data[0].tempDir)); // Save temp directory to local storage
+                    localStorage.setItem('taskId', JSON.stringify(analysisRes.data[0].taskId)); // Save task ID to local storage
+                    if (analysisRes.data[0].tempDir !== undefined) {
+                        localStorage.setItem('tempDir', JSON.stringify(analysisRes.data[0].tempDir));
+                    }
                     setRunningTasks(true); // Set running tasks to true
                     dispatch(setActiveTab('analysis'));
                     setShowAnalysis(true);
                 }
-                else if (res.data[0].status === 400) {
+                else if (analysisRes.data[0].status === 400) {
                     setShowDialog(false); // Hide dialog
-                    toast.error(res.data[0].message);
+                    toast.error(analysisRes.data[0].message);
                 }
                 else {
                     setShowDialog(false); // Hide dialog
@@ -421,151 +453,155 @@ const NewProject = () => {
                             </Dialog>
                         )}
 
-                        {/* Output Directory */}
-                        <FormField
-                            control={form.control}
-                            name="outputDirectory"
-                            render={({ field }) => (
-                                <div className='flex justify-start items-center w-[100%] gap-8'>
-                                    <div className='w-[50%]'>
-                                        <FormItem style={{ position: 'relative' }}>
-                                            <FormLabel className="my-4 text-2xl">Output Directory</FormLabel>
-                                            <Input
-                                                type="text"
-                                                placeholder="paste the path to the output directory here"
-                                                {...field}
-                                                className="focus-within:ring-orange-500"
-                                                autoComplete="off"
-                                                onChange={(e) => {
-                                                    field.onChange(e);
-                                                    filterOutputDirSuggestions(e.target.value);
-                                                }}
-                                                onFocus={() => {
-                                                    filterOutputDirSuggestions(field.value);
-                                                }}
-                                                onBlur={() => {
-                                                    // Delay hiding to allow click
-                                                    setTimeout(() => setShowOutputDirSuggestions(false), 200);
-                                                }}
-                                            />
-                                            {showOutputDirSuggestions && filteredOutputDirSuggestions.length > 0 && (
-                                                <ul
-                                                    style={{
-                                                        position: 'absolute',
-                                                        top: '100%',
-                                                        left: 0,
-                                                        right: 0,
-                                                        width: '50%',
-                                                        background: 'black',
-                                                        color: 'white',
-                                                        border: '1px solid #ccc',
-                                                        maxHeight: '150px',
-                                                        overflowY: 'auto',
-                                                        zIndex: 1000,
-                                                        margin: 0,
-                                                        padding: 0,
-                                                        listStyle: 'none',
-                                                    }}
-                                                >
-                                                    {filteredOutputDirSuggestions.map((suggestion, i) => (
-                                                        <li
-                                                            key={i}
-                                                            style={{ padding: '8px', cursor: 'pointer' }}
-                                                            onMouseDown={e => e.preventDefault()} // prevent blur
-                                                            onClick={() => {
-                                                                form.setValue('outputDirectory', suggestion);
-                                                                setShowOutputDirSuggestions(false);
+                        {mode !== 'server_mode' && (
+                            <>
+                                {/* Output Directory */}
+                                <FormField
+                                    control={form.control}
+                                    name="outputDirectory"
+                                    render={({ field }) => (
+                                        <div className='flex justify-start items-center w-[100%] gap-8'>
+                                            <div className='w-[50%]'>
+                                                <FormItem style={{ position: 'relative' }}>
+                                                    <FormLabel className="my-4 text-2xl">Output Directory</FormLabel>
+                                                    <Input
+                                                        type="text"
+                                                        placeholder="paste the path to the output directory here"
+                                                        {...field}
+                                                        className="focus-within:ring-orange-500"
+                                                        autoComplete="off"
+                                                        onChange={(e) => {
+                                                            field.onChange(e);
+                                                            filterOutputDirSuggestions(e.target.value);
+                                                        }}
+                                                        onFocus={() => {
+                                                            filterOutputDirSuggestions(field.value);
+                                                        }}
+                                                        onBlur={() => {
+                                                            // Delay hiding to allow click
+                                                            setTimeout(() => setShowOutputDirSuggestions(false), 200);
+                                                        }}
+                                                    />
+                                                    {showOutputDirSuggestions && filteredOutputDirSuggestions.length > 0 && (
+                                                        <ul
+                                                            style={{
+                                                                position: 'absolute',
+                                                                top: '100%',
+                                                                left: 0,
+                                                                right: 0,
+                                                                width: '50%',
+                                                                background: 'black',
+                                                                color: 'white',
+                                                                border: '1px solid #ccc',
+                                                                maxHeight: '150px',
+                                                                overflowY: 'auto',
+                                                                zIndex: 1000,
+                                                                margin: 0,
+                                                                padding: 0,
+                                                                listStyle: 'none',
                                                             }}
                                                         >
-                                                            {suggestion}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                            {form.formState.errors.outputDirectory && (
-                                                <p className="mt-2 text-sm text-red-500">
-                                                    {form.formState.errors.outputDirectory.message}
-                                                </p>
-                                            )}
-                                        </FormItem>
-                                    </div>
-                                </div>
-                            )}
-                        />
+                                                            {filteredOutputDirSuggestions.map((suggestion, i) => (
+                                                                <li
+                                                                    key={i}
+                                                                    style={{ padding: '8px', cursor: 'pointer' }}
+                                                                    onMouseDown={e => e.preventDefault()} // prevent blur
+                                                                    onClick={() => {
+                                                                        form.setValue('outputDirectory', suggestion);
+                                                                        setShowOutputDirSuggestions(false);
+                                                                    }}
+                                                                >
+                                                                    {suggestion}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    {form.formState.errors.outputDirectory && (
+                                                        <p className="mt-2 text-sm text-red-500">
+                                                            {form.formState.errors.outputDirectory.message}
+                                                        </p>
+                                                    )}
+                                                </FormItem>
+                                            </div>
+                                        </div>
+                                    )}
+                                />
 
-                        {/* Local Directory */}
-                        <FormField
-                            control={form.control}
-                            name="localDirectory"
-                            render={({ field }) => (
-                                <div className='flex justify-start items-center w-[100%] gap-8'>
-                                    <div className='w-[50%]'>
-                                        <FormItem style={{ position: 'relative' }}>
-                                            <FormLabel className="my-4 text-2xl">Local Directory</FormLabel>
-                                            <Input
-                                                type="text"
-                                                placeholder="Paste the path to the Local Directory here"
-                                                {...field}
-                                                className="focus-within:ring-orange-500"
-                                                autoComplete="off"
-                                                onFocus={() => {
-                                                    // On focus, filter suggestions with current value
-                                                    filterLocalDirSuggestions(field.value);
-                                                }}
-                                                onBlur={() => {
-                                                    // Delay hiding suggestions so click can register
-                                                    setTimeout(() => setShowLocalDirSuggestions(false), 200);
-                                                }}
-                                            />
-                                            {showLocalDirSuggestions && filteredLocalDirSuggestions.length > 0 && (
-                                                <ul
-                                                    style={{
-                                                        position: 'absolute',
-                                                        top: '100%',
-                                                        width: '50%',
-                                                        left: 0,
-                                                        right: 0,
-                                                        background: 'black',
-                                                        color: 'white',
-                                                        border: '1px solid #ccc',
-                                                        maxHeight: '150px',
-                                                        overflowY: 'auto',
-                                                        zIndex: 1000,
-                                                        margin: 0,
-                                                        padding: 0,
-                                                        listStyle: 'none',
-                                                    }}
-                                                >
-                                                    {filteredLocalDirSuggestions.map((suggestion, i) => (
-                                                        <li
-                                                            key={i}
-                                                            onMouseDown={e => e.preventDefault()} // prevent blur
-                                                            onClick={() => {
-                                                                form.setValue('localDirectory', suggestion);
-                                                                setShowLocalDirSuggestions(false);
+                                {/* Local Directory */}
+                                <FormField
+                                    control={form.control}
+                                    name="localDirectory"
+                                    render={({ field }) => (
+                                        <div className='flex justify-start items-center w-[100%] gap-8'>
+                                            <div className='w-[50%]'>
+                                                <FormItem style={{ position: 'relative' }}>
+                                                    <FormLabel className="my-4 text-2xl">Local Directory</FormLabel>
+                                                    <Input
+                                                        type="text"
+                                                        placeholder="Paste the path to the Local Directory here"
+                                                        {...field}
+                                                        className="focus-within:ring-orange-500"
+                                                        autoComplete="off"
+                                                        onFocus={() => {
+                                                            // On focus, filter suggestions with current value
+                                                            filterLocalDirSuggestions(field.value);
+                                                        }}
+                                                        onBlur={() => {
+                                                            // Delay hiding suggestions so click can register
+                                                            setTimeout(() => setShowLocalDirSuggestions(false), 200);
+                                                        }}
+                                                    />
+                                                    {showLocalDirSuggestions && filteredLocalDirSuggestions.length > 0 && (
+                                                        <ul
+                                                            style={{
+                                                                position: 'absolute',
+                                                                top: '100%',
+                                                                width: '50%',
+                                                                left: 0,
+                                                                right: 0,
+                                                                background: 'black',
+                                                                color: 'white',
+                                                                border: '1px solid #ccc',
+                                                                maxHeight: '150px',
+                                                                overflowY: 'auto',
+                                                                zIndex: 1000,
+                                                                margin: 0,
+                                                                padding: 0,
+                                                                listStyle: 'none',
                                                             }}
-                                                            style={{ padding: '8px', cursor: 'pointer' }}
                                                         >
-                                                            {suggestion}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </FormItem>
-                                    </div>
-                                    <div className='w-[50%]'>
-                                        <FormLabel className="my-4 text-2xl">Download Local Directory</FormLabel>
-                                        <a
-                                            href="https://drive.google.com/file/d/1HY6fZ2Mnl_0aQ8eZAJ1HOc-NekUJ7aIU/view?usp=sharing"
-                                            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition"
-                                            download
-                                        >
-                                            Download Local Directory
-                                        </a>
-                                    </div>
-                                </div>
-                            )}
-                        />
+                                                            {filteredLocalDirSuggestions.map((suggestion, i) => (
+                                                                <li
+                                                                    key={i}
+                                                                    onMouseDown={e => e.preventDefault()} // prevent blur
+                                                                    onClick={() => {
+                                                                        form.setValue('localDirectory', suggestion);
+                                                                        setShowLocalDirSuggestions(false);
+                                                                    }}
+                                                                    style={{ padding: '8px', cursor: 'pointer' }}
+                                                                >
+                                                                    {suggestion}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </FormItem>
+                                            </div>
+                                            <div className='w-[50%]'>
+                                                <FormLabel className="my-4 text-2xl">Download Local Directory</FormLabel>
+                                                <a
+                                                    href="https://drive.google.com/file/d/1HY6fZ2Mnl_0aQ8eZAJ1HOc-NekUJ7aIU/view?usp=sharing"
+                                                    className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition"
+                                                    download
+                                                >
+                                                    Download Local Directory
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
+                                />
+                            </>
+                        )}
 
 
 

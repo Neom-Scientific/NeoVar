@@ -118,7 +118,7 @@ const [counterData, setCounterData] = useState(null);
   const [apiCall, setApiCall] = useState(false);
   const [ notFound, setNotFound ] = useState('');
  let email;
-    const user = Cookies.get('user');
+    const user = Cookies.get('NeoVar_user');
     if (user) {
         try {
             const parsedUser = JSON.parse(user);

@@ -7,7 +7,7 @@ import os from 'os';
 import db from '@/lib/db';
 import { exec, spawn } from 'child_process';
 import { fetchScriptsFromAWS } from '@/lib/fetchScriptsFromAWS';
-
+import { Client } from 'ssh2';
 
 // Ordered steps for progress tracking
 const progressSteps = [
@@ -28,7 +28,7 @@ const progressSteps = [
 export async function POST(req) {
   try {
     const { taskId, email } = await req.json();
-    if(fs.existsSync('/dev/shm/resources')) {
+    if (fs.existsSync('/dev/shm/resources')) {
       fs.rmSync('/dev/shm/resources', { recursive: true, force: true });
     }
 
@@ -38,16 +38,29 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Project not found' }, { status: 200 });
     }
 
-    const subtasks = await db.query('SELECT * FROM SubTasks WHERE taskid = $1 ORDER BY subtaskid ASC', [taskId]);
+    // Detect server-mode by checking a field (e.g., server_host or a mode column)
+
+    const subtasks = await db.query('SELECT * FROM SubTasks WHERE taskid = $1 and email = $2 ORDER BY subtaskid ASC', [taskId, email]);
     if (subtasks.rowCount === 0) {
       return NextResponse.json({ error: 'No subtasks found for this task' }, { status: 200 });
+    }
+    const isServerMode = !!subtasks.rows[0].server_host; // or use a 'mode' column if you have one
+
+    let server = null;
+    if (isServerMode) {
+      server = {
+        host: subtasks.rows[0].server_host,
+        port: subtasks.rows[0].server_port,
+        user: subtasks.rows[0].server_user,
+        os: subtasks.rows[0].server_os,
+      };
     }
 
     let logPath;
     const startTime = task.rows[0].starttime;
     const resources_path = path.join(os.tmpdir(), `.resources_${taskId}`);
-    for (const subtask of subtasks.rows){
-       logPath = path.join(
+    for (const subtask of subtasks.rows) {
+      logPath = path.join(
         path.dirname(subtask.logpath),
         `${subtask.sampleid}.log`
       );
@@ -68,10 +81,16 @@ export async function POST(req) {
         );
         // console.log('first sampleLogPath:', sampleLogPath);
         let subtaskLogContent = '';
-        
         try {
-          subtaskLogContent = fs.readFileSync(sampleLogPath, 'utf8');
-        } catch {
+          if (isServerMode) {
+            // You need to know which server to connect to (store server info in RunningTasks or SubTasks)
+            subtaskLogContent = await readRemoteFile(server, subtask.logpath);
+            // console.log('subtaskLogContent:', subtaskLogContent);
+          } else {
+            subtaskLogContent = fs.readFileSync(subtask.logpath, 'utf8');
+          }
+        } catch (err) {
+          console.log('error reading log file:', err, subtask.logpath);
           continue; // If the log file is not found, skip this subtask
         }
 
@@ -94,8 +113,8 @@ export async function POST(req) {
 
         // Update the progress of the subtask in the database
         await db.query(
-          'UPDATE SubTasks SET progress = $1 WHERE subtaskid = $2 AND taskid = $3',
-          [subtaskProgress, subtask.subtaskid, taskId]
+          'UPDATE SubTasks SET progress = $1 WHERE subtaskid = $2 AND taskid = $3 and email = $4',
+          [subtaskProgress, subtask.subtaskid, taskId, email]
         );
         // console.log(`Subtask ${subtask.subtaskid} progress: ${subtaskProgress}%`); // Log the progress for debugging
 
@@ -105,8 +124,8 @@ export async function POST(req) {
 
           // Mark the subtask as completed instead of deleting it
           await db.query(
-            'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3',
-            ['completed', subtask.subtaskid, taskId]
+            'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3 and email = $4',
+            ['completed', subtask.subtaskid, taskId, email]
           );
           // console.log(`Subtask ${subtask.subtaskid} marked as completed.`);
         } else {
@@ -216,10 +235,19 @@ export async function POST(req) {
         const daemonPath = 'tmp/ramfiles'
         spawn(daemonPath, args, { stdio: 'inherit', detached: true }).unref();
 
+        if (isServerMode && nextSubtask) {
+          // Fetch latest subtask info from DB (optional, for fresh data)
+          const subtaskRes = await db.query('SELECT * FROM SubTasks WHERE subtaskid = $1 AND taskid = $2 and email = $3', [nextSubtask.subtaskid, taskId,email]);
+          const subtaskToRun = subtaskRes.rows[0];
+
+          // Run analysis for this subtask on the remote server
+          await runRemoteAnalysisForSubtask(server, subtaskToRun, task);
+        }
+
         // Update the status of the next subtask to 'running'
         await db.query(
-          'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3',
-          ['running', nextSubtask.subtaskid, taskId]
+          'UPDATE SubTasks SET status = $1 WHERE subtaskid = $2 AND taskid = $3 and email = $4',
+          ['running', nextSubtask.subtaskid, taskId, email]
         );
         if (fs.existsSync(tempDir)) {
           fs.rmdirSync(tempDir, { recursive: true });
@@ -249,4 +277,60 @@ export async function POST(req) {
     console.error('Progress error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+let privateKey;
+if (process.env.SSH_PRIVATE_KEY) {
+  // If the key is set in env, use it directly
+  privateKey = Buffer.from(process.env.SSH_PRIVATE_KEY.replace(/\\n/g, '\n'));
+}
+
+
+function readRemoteFile(server, remotePath) {
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+    let data = '';
+    conn.on('ready', () => {
+      conn.sftp((err, sftp) => {
+        if (err) return reject(err);
+        const stream = sftp.createReadStream(remotePath);
+        stream.on('data', chunk => data += chunk.toString());
+        stream.on('end', () => {
+          conn.end();
+          resolve(data);
+        });
+        stream.on('error', err => {
+          conn.end();
+          reject(err);
+        });
+      });
+    }).connect({
+      host: server.host,
+      port: server.port,
+      username: server.user,
+      privateKey
+    });
+  });
+}
+
+async function runRemoteAnalysisForSubtask(server, subtask, task) {
+  const analysisCmd = `bash ${subtask.scriptpath1} ${subtask.scriptpath2} ${task.inputdir} ${task.outputdir} ${subtask.target} ${subtask.target_interval} ${subtask.localdir} > ${subtask.logpath} 2>&1 &`;
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+    conn.on('ready', () => {
+      conn.exec(analysisCmd, (err, stream) => {
+        if (err) {
+          conn.end();
+          return reject(err);
+        }
+        conn.end();
+        resolve();
+      });
+    }).connect({
+      host: server.host,
+      port: server.port,
+      username: server.user,
+      privateKey
+    });
+  });
 }
